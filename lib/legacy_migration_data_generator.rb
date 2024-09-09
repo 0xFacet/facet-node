@@ -136,6 +136,45 @@ class LegacyMigrationDataGenerator
     end.to_h
   end
   
+  def check_block_consistency(block_by_number_responses, latest_db_block)
+    sorted_block_numbers = block_by_number_responses.keys.sort
+    first_block_number = sorted_block_numbers.first
+    first_block_data = block_by_number_responses[first_block_number]['result']
+
+    if latest_db_block
+      if first_block_number == latest_db_block.number + 1
+        if latest_db_block.block_hash != first_block_data['parentHash']
+          reorg_message = "Reorg detected at block #{first_block_number}"
+          logger.warn(reorg_message)
+          Airbrake.notify(reorg_message)
+          
+          EthBlock.where("number >= ?", latest_db_block.number).destroy_all
+          return false
+        end
+      else
+        unexpected_block_message = "Unexpected block number: expected #{latest_db_block.number + 1}, got #{first_block_number}"
+        Airbrake.notify(unexpected_block_message)
+        
+        raise unexpected_block_message
+      end
+    end
+
+    # Check consistency of all blocks in the batch
+    sorted_block_numbers.each_cons(2) do |current_number, next_number|
+      current_block = block_by_number_responses[current_number]['result']
+      next_block = block_by_number_responses[next_number]['result']
+
+      unless next_block['parentHash'] == current_block['hash'] && next_number == current_number + 1
+        inconsistency_message = "Block inconsistency detected between blocks #{current_number} and #{next_number}"
+        logger.warn(inconsistency_message)
+        Airbrake.notify(inconsistency_message)
+        return false
+      end
+    end
+
+    true
+  end
+  
   def import_blocks(block_numbers, l1_rpc_responses)
     logger.info "Block Importer: importing blocks #{block_numbers.join(', ')}"
     start = Time.current
@@ -151,26 +190,9 @@ class LegacyMigrationDataGenerator
     
     l1_rpc_responses.reject! { |block_number, promise| block_by_number_responses.key?(block_number) }
     
-    # Check for reorg at the start of the batch
-    first_block_number = block_numbers.first
-    first_block_data = block_by_number_responses[first_block_number]['result']
-    
-    if latest_db_block
-      if first_block_number == latest_db_block.number + 1
-        if latest_db_block.block_hash != first_block_data['parentHash']
-          reorg_message = "Reorg detected at block #{first_block_number}"
-          logger.warn(reorg_message)
-          Airbrake.notify(reorg_message)
-          
-          EthBlock.where("number >= ?", latest_db_block.number).destroy_all
-          return nil
-        end
-      else
-        unexpected_block_message = "Unexpected block number: expected #{latest_db_block.number + 1}, got #{first_block_number}"
-        Airbrake.notify(unexpected_block_message)
-        
-        raise unexpected_block_message
-      end
+    unless check_block_consistency(block_by_number_responses, latest_db_block)
+      logger.warn("Block consistency check failed. Restarting import process.")
+      return nil
     end
     
     legacy_eth_blocks_future, ethscriptions_future, legacy_tx_receipts_future = [
