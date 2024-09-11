@@ -4,8 +4,14 @@ module PredeployManager
   
   PREDEPLOY_INFO_PATH = Rails.root.join('config', 'predeploy_info.json')
   
+  class LocalContract < T::Struct
+    const :name, String
+    const :path, Pathname
+  end
+  
   def predeploy_to_local_map
     legacy_dir = Rails.root.join("lib/solidity/legacy")
+    predeploy_dir = Rails.root.join("lib/solidity/predeploy")
     map = {}
     
     Dir.glob("#{legacy_dir}/*.sol").each do |file_path|
@@ -19,20 +25,21 @@ module PredeployManager
           raise
         end
         
-        map[address] = filename
+        map[address] = LocalContract.new(name: filename, path: Pathname.new(file_path))
         
         deployed_by_contract_prefixes = %w(ERC20Bridge FacetBuddy FacetSwapPair)
         
         if deployed_by_contract_prefixes.any? { |prefix| filename.match(/^#{prefix}V[a-f0-9]{3}$/i) }
-          contract = EVMHelpers.compile_contract("legacy/#{filename}")
+          contract = EVMHelpers.compile_contract(legacy_dir.join(file_path))
         
-          map["0x" + contract.parent.init_code_hash.last(40)] = filename
+          c = LocalContract.new(name: filename, path: Pathname.new(file_path))
+          map["0x" + contract.parent.init_code_hash.last(40)] = c
         end
       end
-    end 
+    end
     
-    map["0x00000000000000000000000000000000000000c5"] = "NonExistentContractShim"
-    map["0x4200000000000000000000000000000000000015"] = "L1Block"
+    map["0x00000000000000000000000000000000000000c5"] = LocalContract.new(name: "NonExistentContractShim", path: predeploy_dir.join("NonExistentContractShim.sol"))
+    map["0x4200000000000000000000000000000000000015"] = LocalContract.new(name: "L1Block", path: predeploy_dir.join("L1Block.sol"))
     
     map
   end
@@ -67,14 +74,13 @@ module PredeployManager
   memoize :get_contract_from_predeploy_info
   
   def local_from_predeploy(address)
-    name = predeploy_to_local_map.fetch(address&.downcase)
-    "legacy/#{name}"
+    predeploy_to_local_map.fetch(address&.downcase)
   end
   memoize :local_from_predeploy
 
   def get_code(address)
     local = local_from_predeploy(address)
-    contract = EVMHelpers.compile_contract(local)
+    contract = EVMHelpers.compile_contract(local.path)
     raise unless contract.parent.bin_runtime
     unless is_valid_hex?("0x" + contract.parent.bin_runtime)
       binding.irb
@@ -96,7 +102,7 @@ module PredeployManager
 
     hex_result = result.zpad(32).bytes_to_hex
     
-    predeploy_to_local_map.map do |address, alloc|
+    predeploy_to_local_map.map do |address, _|
       [
         address,
         {
@@ -113,15 +119,15 @@ module PredeployManager
   def generate_predeploy_info_json
     predeploy_info = {}
     
-    predeploy_to_local_map.each do |address, contract_name|
-      contract = EVMHelpers.compile_contract("legacy/#{contract_name}")
-      predeploy_info[contract_name] ||= {
+    predeploy_to_local_map.each do |address, contract_struct|
+      contract = EVMHelpers.compile_contract(contract_struct.path)
+      predeploy_info[contract_struct.name] ||= {
         name: contract.name,
         address: [],
         abi: contract.abi,
         bin: contract.bin,
       }
-      predeploy_info[contract_name][:address] << address
+      predeploy_info[contract_struct.name][:address] << address
     end
     
     proxy_contract = EVMHelpers.compile_contract("legacy/ERC1967Proxy")

@@ -16,9 +16,19 @@ module EVMHelpers
   end
   
   def memoized_compile_contract(contract_path, checksum)
-    contract_name = contract_path.split('/').last
-    contract_path += ".sol" unless contract_path.ends_with?(".sol")
-    contract_file = Rails.root.join('lib', 'solidity', contract_path)
+    contract_name = File.basename(contract_path, ".sol")
+    
+    # Check if the path is already absolute
+    if Pathname.new(contract_path).absolute?
+      contract_file = Pathname.new(contract_path)
+    else
+      # If it's not absolute, assume it's relative to 'lib/solidity'
+      contract_file = Rails.root.join('lib', 'solidity', contract_path)
+    end
+    
+    contract_file += ".sol" unless contract_file.to_s.ends_with?(".sol")
+    
+    raise "Contract file not found: #{contract_file}" unless File.exist?(contract_file)
     
     contract_compiled = SolidityCompiler.compile(contract_file)
     contract_bytecode = contract_compiled[contract_name]['bytecode']

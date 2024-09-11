@@ -13,6 +13,7 @@ RSpec.describe "Bridge contracts" do
     bridge_deploy_receipt = deploy_contract_with_proxy(
       implementation: 'legacy/EtherBridgeV064',
       from: from_address,
+      gas_limit: 5_000_000,
       args: [
         "Bridge Tester",
         "BT",
