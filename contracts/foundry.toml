@@ -8,10 +8,13 @@ optimizer_runs = 200
 solc_version = "0.8.24"
 ast = true
 evm_version = "cancun"
+gas_limit = 9223372036854775807
 
 ffi = true
 fs_permissions = [
-  { access='read-write', path='./predeploy-contracts.json' }
+  { access='read-write', path='./predeploy-contracts.json' },
+  { access='read-write', path='./script/erc20_state_test.json' },
+  { access='read-write', path='./script/erc20_state_test_2.json' }
 ]
 
 ignored_error_codes = ["transient-storage", "code-size", "init-code-size", 5159]

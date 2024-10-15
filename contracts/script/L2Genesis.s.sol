@@ -5,6 +5,7 @@ import { Script } from "forge-std/Script.sol";
 import { console2 as console } from "forge-std/console2.sol";
 import "solady/src/utils/LibString.sol";
 import { stdJson } from "forge-std/StdJson.sol";
+import { ERC20PublicMintGenesis } from "./ERC20PublicMintGenesis.s.sol";
 
 contract L2Genesis is Script {
     using LibString for *;
@@ -23,16 +24,20 @@ contract L2Genesis is Script {
     }
 
     PredeployContractList internal predeployContracts;
-    
+
+    ERC20PublicMintGenesis public erc20Generator;
+
     function setUp() public {
         deployer = makeAddr("deployer");
-        populatePredeployContracts();
+        erc20Generator = new ERC20PublicMintGenesis();
+        // populatePredeployContracts();
     }
 
     function run() public {
         vm.startPrank(deployer);
         
         etchContracts();
+        generateAllGenesis();
         vm.stopPrank();
         
         vm.etch(msg.sender, "");
@@ -42,12 +47,22 @@ contract L2Genesis is Script {
         vm.deal(deployer, 0);
         vm.resetNonce(deployer);
 
-        console.log("Writing state dump to: genesis-test.json");
+        console.log("Writing state dump to: facet-local-genesis-allocs.json");
         
         vm.dumpState("facet-local-genesis-allocs.json");
         
         // Write predeployContracts to JSON
         writePredeployContractsToJson();
+    }
+    
+    function generateAllGenesis() internal {
+        // Generate ERC20 genesis
+        erc20Generator.generateERC20Genesis("script/erc20_state_test.json");
+        
+        // Add calls to other genesis generators here as needed
+        // For example:
+        // bridgeGenesisGenerator.generateBridgeGenesis("script/bridge_state.json");
+        // swapGenesisGenerator.generateSwapGenesis("script/swap_state.json");
     }
     
     function etchContracts() internal {
