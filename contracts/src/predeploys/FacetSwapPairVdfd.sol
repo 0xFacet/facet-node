@@ -105,7 +105,12 @@ contract FacetSwapPairVdfd is FacetERC20, Initializable, Upgradeable {
     function _update(uint256 balance0, uint256 balance1, uint112 _reserve0, uint112 _reserve1) private {
         require(balance0 <= type(uint112).max && balance1 <= type(uint112).max, "FacetSwapV1: OVERFLOW");
         uint32 blockTimestamp = uint32(block.timestamp % 2**32);
-        uint32 timeElapsed = blockTimestamp - s().blockTimestampLast;
+        
+        uint32 timeElapsed;
+        unchecked {
+            timeElapsed = blockTimestamp - s().blockTimestampLast;
+        }
+        
         if (timeElapsed > 0 && _reserve0 != 0 && _reserve1 != 0) {
             unchecked {
                 s().price0CumulativeLast += uint(UQ112x112.encode(_reserve1).uqdiv(_reserve0)) * timeElapsed;
