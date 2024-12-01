@@ -10,8 +10,16 @@ import "src/libraries/FacetOwnable.sol";
 import "solady/utils/Initializable.sol";
 import "solady/utils/SafeTransferLib.sol";
 
+interface IWETH {
+    function deposit() external payable;
+    function transfer(address to, uint value) external returns (bool);
+    function withdraw(uint) external;
+}
+
 contract FacetSwapRouterV56d is Initializable, Upgradeable, FacetOwnable, Pausable {
     using SafeTransferLib for address;
+    
+    IWETH public constant WFCT = IWETH(0x4200000000000000000000000000000000000006);
     
     struct FacetSwapRouterStorage {
         address factory;
@@ -145,23 +153,40 @@ contract FacetSwapRouterV56d is Initializable, Upgradeable, FacetOwnable, Pausab
         address[] memory path,
         address to,
         uint256 deadline
-    ) public virtual whenNotPaused ensureWETHBalance returns (uint256[] memory amounts) {
-        require(path[0] == s().WETH || path[path.length - 1] == s().WETH, "Must have WETH as either the first or last token in the path");
+    ) public virtual payable whenNotPaused ensureWETHBalance returns (uint256[] memory amounts) {
+        require(path[0] == s().WETH || path[path.length - 1] == s().WETH, "Must have WETH as either first or last token");
         require(path[0] != path[path.length - 1], "Cannot self trade");
+        
+        if (path[0] == address(WFCT) && msg.value > 0) {
+            require(msg.value == amountIn, "Incorrect FCT amount");
+            WFCT.deposit{value: amountIn}();
+            WFCT.transfer(msg.sender, amountIn);
+        }
 
         uint256 amountInWithFee = path[0] == s().WETH ? amountIn - calculateFeeAmount(amountIn) : amountIn;
         amounts = _swapExactTokensForTokens(amountInWithFee, amountOutMin, path, address(this), deadline);
+        
         uint256 amountToChargeFeeOn = path[0] == s().WETH ? amountIn : amounts[amounts.length - 1];
         uint256 feeAmount = calculateFeeAmount(amountToChargeFeeOn);
+        
         if (path[0] == s().WETH) {
             amounts[0] = amountIn;
             ERC20(s().WETH).transferFrom(msg.sender, address(this), feeAmount);
         } else {
             amounts[amounts.length - 1] = amounts[amounts.length - 1] - feeAmount;
         }
+
         address outputToken = path[path.length - 1];
-        outputToken.safeTransfer(to, amounts[amounts.length - 1]);
-        emit FeeAdjustedSwap(path[0], path[path.length - 1], amounts[0], amounts[amounts.length - 1], feeAmount, to);
+        uint256 outputAmount = amounts[amounts.length - 1];
+        
+        if (outputToken == address(WFCT)) {
+            WFCT.withdraw(outputAmount);
+            _safeTransferFCT(to, outputAmount);
+        } else {
+            outputToken.safeTransfer(to, outputAmount);
+        }
+
+        emit FeeAdjustedSwap(path[0], outputToken, amounts[0], outputAmount, feeAmount, to);
         return amounts;
     }
 
@@ -186,23 +211,48 @@ contract FacetSwapRouterV56d is Initializable, Upgradeable, FacetOwnable, Pausab
         address[] memory path,
         address to,
         uint256 deadline
-    ) public virtual whenNotPaused ensureWETHBalance returns (uint256[] memory amounts) {
-        require(path[0] == s().WETH || path[path.length - 1] == s().WETH, "Must have WETH as either the first or last token in the path");
+    ) public virtual payable whenNotPaused ensureWETHBalance returns (uint256[] memory amounts) {
+        require(path[0] == s().WETH || path[path.length - 1] == s().WETH, "Must have WETH as either first or last token");
         require(path[0] != path[path.length - 1], "Cannot self trade");
 
         uint256 amountOutWithFee = path[path.length - 1] == s().WETH ? amountOut + calculateFeeAmount(amountOut) : amountOut;
-        amounts = _swapTokensForExactTokens(amountOutWithFee, amountInMax, path, address(this), deadline);
+        
+        amounts = getAmountsIn(s().factory, amountOutWithFee, path);
+
+        if (path[0] == address(WFCT) && msg.value > 0) {
+            require(msg.value >= amounts[0], 'UniswapV2Router: EXCESSIVE_INPUT_AMOUNT');
+            
+            if (msg.value > amounts[0]) {
+                _safeTransferFCT(msg.sender, msg.value - amounts[0]);
+            }
+            
+            WFCT.deposit{value: amounts[0]}();
+            WFCT.transfer(msg.sender, amounts[0]);
+        }
+        
+        _swapTokensForExactTokens(amountOutWithFee, amountInMax, path, address(this), deadline);
+        
         uint256 amountToChargeFeeOn = path[0] == s().WETH ? amounts[0] : amountOut;
         uint256 feeAmount = calculateFeeAmount(amountToChargeFeeOn);
+        
         if (path[0] == s().WETH) {
             amounts[0] = amounts[0] + feeAmount;
             ERC20(s().WETH).transferFrom(msg.sender, address(this), feeAmount);
         } else {
             amounts[amounts.length - 1] = amountOut;
         }
+
         address outputToken = path[path.length - 1];
-        outputToken.safeTransfer(to, amounts[amounts.length - 1]);
-        emit FeeAdjustedSwap(path[0], path[path.length - 1], amounts[0], amounts[amounts.length - 1], feeAmount, to);
+        uint256 outputAmount = amounts[amounts.length - 1];
+
+        if (outputToken == address(WFCT)) {
+            WFCT.withdraw(outputAmount);
+            _safeTransferFCT(to, outputAmount);
+        } else {
+            outputToken.safeTransfer(to, outputAmount);
+        }
+
+        emit FeeAdjustedSwap(path[0], outputToken, amounts[0], outputAmount, feeAmount, to);
         return amounts;
     }
 
@@ -368,5 +418,9 @@ contract FacetSwapRouterV56d is Initializable, Upgradeable, FacetOwnable, Pausab
     
     function factory() public view returns (address) {
         return s().factory;
+    }
+    
+    function _safeTransferFCT(address to, uint256 value) internal {
+        SafeTransferLib.safeTransferETH(to, value);
     }
 }
