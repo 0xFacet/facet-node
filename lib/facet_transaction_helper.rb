@@ -2,7 +2,8 @@ module FacetTransactionHelper
   def import_eth_txs(transactions)
     mock_ethereum_client = instance_double(EthRpcClient)
     
-    current_max_eth_block = EthBlockImporter.instance.current_max_eth_block
+    importer = ImporterSingleton.instance
+    current_max_eth_block = importer.current_max_eth_block
     
     # Convert transaction params to EthTransaction objects
     eth_transactions = transactions.map.with_index do |tx_params, index|
@@ -25,15 +26,15 @@ module FacetTransactionHelper
     block_result = rpc_results[0].merge('parentHash' => current_max_eth_block.block_hash.to_hex)
     receipt_result = rpc_results[1]
     
-    instance = EthBlockImporter.instance
-    instance.ethereum_client = mock_ethereum_client
+    old_client = importer.ethereum_client
+    
+    importer.ethereum_client = mock_ethereum_client
 
     allow(mock_ethereum_client).to receive(:get_block_number).and_return(eth_transactions.first.block_number)
     allow(mock_ethereum_client).to receive(:get_block).and_return(block_result)
     allow(mock_ethereum_client).to receive(:get_transaction_receipts).and_return(receipt_result)
 
-    importer = EthBlockImporter.instance
-    facet_blocks, eth_blocks = importer.import_next_block# rescue binding.irb
+    facet_blocks, eth_blocks = importer.import_next_block
     
     latest_l2_block = EthRpcClient.l2.get_block("latest", true)
     # binding.irb
@@ -55,6 +56,8 @@ module FacetTransactionHelper
     end.compact
 
     res
+  ensure
+    importer.ethereum_client = old_client
   end
 
   # Keep the original method for backwards compatibility
