@@ -1,9 +1,11 @@
 class EthBlockImporter
   include SysConfig
-  include Singleton
   include Memery
   
+  # Raised when the next block to import is not yet available on L1
   class BlockNotReadyToImportError < StandardError; end
+  # Raised when a re-org is detected (parent hash mismatch)
+  class ReorgDetectedError < StandardError; end
   
   attr_accessor :l1_rpc_results, :facet_block_cache, :ethereum_client, :eth_block_cache, :geth_driver
   
@@ -15,6 +17,8 @@ class EthBlockImporter
     @ethereum_client ||= EthRpcClient.new(ENV.fetch('L1_RPC_URL'))
     
     @geth_driver = GethDriver
+    
+    MemeryExtensions.clear_all_caches!
     
     set_eth_block_starting_points
     populate_facet_block_cache
@@ -129,7 +133,7 @@ class EthBlockImporter
         facet_block_cache[l2_candidate] = facet_block
         return [l1_candidate, l2_candidate]
       else
-        logger.info "Mismatch on block #{l2_candidate}: #{l1_hash} != #{l1_attributes[:hash]}, decrementing"
+        logger.info "Mismatch on block #{l2_candidate}: #{l1_hash.to_hex} != #{l1_attributes[:hash].to_hex}, decrementing"
         
         l2_candidate -= 1
         l1_candidate -= 1
@@ -282,14 +286,8 @@ class EthBlockImporter
       parent_eth_block = eth_block_cache[block_number - 1]
       
       if parent_eth_block && parent_eth_block.block_hash != Hash32.from_hex(block_result['parentHash'])
-        eth_block_cache.delete_if { |number, _| number >= parent_eth_block.number }
-        
-        facet_block_cache.delete_if do |_, facet_block|
-          facet_block.eth_block_number >= parent_eth_block.number
-        end
-        
         logger.info "Reorg detected at block #{block_number}"
-        return
+        raise ReorgDetectedError
       end
       
       eth_block = EthBlock.from_rpc_result(block_result)
