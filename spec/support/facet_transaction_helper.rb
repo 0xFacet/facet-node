@@ -131,7 +131,7 @@ module FacetTransactionHelper
     prev_l1_attributes = GethDriver.client.get_l1_attributes(facet_block.number - 1)
     prev_rate = prev_l1_attributes[:fct_mint_rate]
     
-    new_rate = FctMintCalculator.compute_new_rate(facet_block, prev_rate, prev_l1_attributes[:fct_mint_period_l1_data_gas])
+    new_rate = FctMintCalculatorOld.compute_new_rate(facet_block, prev_rate, prev_l1_attributes[:fct_mint_period_l1_data_gas])
     
     calldata_mint_amount(hex_string) * new_rate
   end

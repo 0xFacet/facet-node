@@ -33,6 +33,16 @@ module SysConfig
     @_genesis_timestamp ||= EthRpcClient.l1.get_block(l1_genesis_block_number)["timestamp"].to_i(16)
   end
   
+  # NOTE: This *must* be a multiple of 10k
+  # TODO: Sepolia v. Mainnet
+  def bluebird_fork_block_number
+    1_200_000
+  end
+  
+  def is_bluebird_fork_block?(block)
+    block.number == bluebird_fork_block_number
+  end
+  
   def is_first_v2_block?(block)
     block.number == 1
   end

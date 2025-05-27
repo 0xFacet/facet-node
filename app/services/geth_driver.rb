@@ -83,6 +83,20 @@ module GethDriver
       end
     end
     
+    # Add L1Block implementation deployment and upgrade at fork block
+    # TODO: Add solady factory deployment tx
+    if SysConfig.is_bluebird_fork_block?(new_facet_block)
+      # Get nonce at start of block for address calculation
+      deployment_nonce = client.eth_get_nonce(
+        FacetTransaction::SYSTEM_ADDRESS.to_hex,
+        "0x" + (new_facet_block.number - 1).to_s(16)
+      )
+
+      # First tx is attributes, second is deployment, so deployment uses nonce + 1
+      system_txs << FacetTransaction.l1_block_implementation_deployment_tx(new_facet_block)
+      system_txs << FacetTransaction.l1_block_proxy_upgrade_tx(new_facet_block, deployment_nonce + 1)
+    end
+    
     transactions_with_attributes = system_txs + transactions
     transaction_payloads = transactions_with_attributes.map(&:to_facet_payload)
     

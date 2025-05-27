@@ -162,15 +162,7 @@ class FacetTransaction < T::Struct
   end
   
   def self.l1_attributes_tx_from_blocks(facet_block)
-    calldata = L1AttributesTxCalldata.build(
-      timestamp: facet_block.eth_block_timestamp,
-      number: facet_block.eth_block_number,
-      base_fee: facet_block.eth_block_base_fee_per_gas,
-      hash: facet_block.eth_block_hash,
-      sequence_number: facet_block.sequence_number,
-      fct_mint_rate: facet_block.fct_mint_rate,
-      fct_mint_period_l1_data_gas: facet_block.fct_mint_period_l1_data_gas
-    )
+    calldata = L1AttributesTxCalldata.build(facet_block)
     
     tx = new
     tx.chain_id = ChainIdManager.current_l2_chain_id
@@ -248,6 +240,66 @@ class FacetTransaction < T::Struct
 
     tx_type = Eth::Util.serialize_int_to_big_endian(DEPOSIT_TX_TYPE)
     ByteString.from_bin("#{tx_type}#{tx_encoded}")
+  end
+  
+  def self.l1_block_implementation_deployment_tx(block)
+    filename = Rails.root.join("contracts/src/upgrades/L1Block.sol")
+    # TODO: use a flat file for the bytecode
+    compiled = SolidityCompiler.compile(filename)
+    bytecode = compiled["L1Block"]["bytecode"]
+
+    upgrade_intent = "deploy new L1Block implementation for Bluebird upgrade"
+
+    tx = new
+    tx.chain_id = ChainIdManager.current_l2_chain_id
+    tx.to_address = nil  # nil for contract creation
+    tx.value = 0
+    tx.mint = 0
+    tx.gas_limit = 10_000_000
+    tx.input = "0x" + bytecode
+    tx.from_address = SYSTEM_ADDRESS
+
+    tx.facet_block = block
+
+    tx.source_hash = FacetTransaction.compute_source_hash(
+      Eth::Util.keccak256(upgrade_intent),
+      L1_INFO_DEPOSIT_SOURCE_DOMAIN
+    )
+
+    tx
+  end
+
+  def self.l1_block_proxy_upgrade_tx(block, deployment_nonce)
+    # Calculate the implementation address that will be deployed
+    rlp_encoded = Eth::Util.rlp_encode([
+      SYSTEM_ADDRESS.to_bin,
+      deployment_nonce
+    ])
+    implementation_address_bytes_32 = Eth::Util.keccak256(rlp_encoded).last(20).rjust(32, "\x00")
+    implementation_address_hex = implementation_address_bytes_32.bytes_to_hex
+    # Create upgradeTo transaction
+    function_selector = Eth::Util.keccak256('upgradeTo(address)').first(4)
+    upgrade_data = function_selector + implementation_address_bytes_32
+
+    upgrade_intent = "upgrade L1Block proxy to Bluebird implementation at #{implementation_address_hex}"
+
+    tx = new
+    tx.chain_id = ChainIdManager.current_l2_chain_id
+    tx.to_address = L1_BLOCK_ADDRESS
+    tx.value = 0
+    tx.mint = 0
+    tx.gas_limit = 10_000_000
+    tx.input = upgrade_data.bytes_to_hex
+    tx.from_address = SYSTEM_ADDRESS
+
+    tx.facet_block = block
+
+    tx.source_hash = FacetTransaction.compute_source_hash(
+      Eth::Util.keccak256(upgrade_intent),
+      L1_INFO_DEPOSIT_SOURCE_DOMAIN
+    )
+
+    tx
   end
   
   def self.tx_decode_errors
