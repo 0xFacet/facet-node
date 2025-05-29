@@ -6,7 +6,7 @@ module SysConfig
   L2_BLOCK_TIME = 12
   
   def block_gas_limit(block)
-    if is_first_v2_block?(block)
+    if block.number == 1
       migration_gas + L2_BLOCK_GAS_LIMIT
     else
       L2_BLOCK_GAS_LIMIT
@@ -47,13 +47,5 @@ module SysConfig
     number = block.is_a?(Integer) ? block : block.number
     
     number >= bluebird_fork_block_number
-  end
-  
-  def is_first_v2_block?(block)
-    block.number == 1
-  end
-  
-  def is_second_v2_block?(block)
-    block.number == 2
   end
 end

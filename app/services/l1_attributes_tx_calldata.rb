@@ -90,7 +90,9 @@ module L1AttributesTxCalldata
     
     # Only decode fct_total_minted if at or past fork block
     if SysConfig.is_bluebird?(facet_block_number)
-      raise "Insufficient calldata length after fork" unless data.length >= 256
+      # Pre-fork: 192 bytes (after removing 4-byte selector)
+      # Post-fork: 192 + 64 = 256 bytes (3 new fields: 16+16+32)
+      raise "Expected exactly 256 bytes of calldata after fork, got #{data.length}" unless data.length == 256
       raise "Invalid data gas" unless fct_mint_period_l1_data_gas.zero?
 
       # word 2 : offsets 192..224 (32 bytes)

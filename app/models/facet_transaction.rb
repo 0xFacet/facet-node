@@ -36,6 +36,7 @@ class FacetTransaction < T::Struct
   SYSTEM_ADDRESS = Address20.from_hex("0xdeaddeaddeaddeaddeaddeaddeaddeaddead0001")
   L1_INFO_ADDRESS = Address20.from_hex("0x4200000000000000000000000000000000000015")
   MIGRATION_MANAGER_ADDRESS = Address20.from_hex("0x22220000000000000000000000000000000000d6")
+  PROXY_ADMIN_ADDRESS = Address20.from_hex("0x4200000000000000000000000000000000000018")
   
   def self.from_ethscription(ethscription)
     tx = new
@@ -189,7 +190,7 @@ class FacetTransaction < T::Struct
   end
   
   def self.v1_to_v2_migration_tx_from_block(facet_block, batch_number:)
-    unless SysConfig.is_first_v2_block?(facet_block)
+    unless facet_block.number == 1
       raise "Invalid block number #{facet_block.number}!"
     end
     
@@ -256,13 +257,13 @@ class FacetTransaction < T::Struct
     tx.value = 0
     tx.mint = 0
     tx.gas_limit = 10_000_000
-    tx.input = "0x" + bytecode
+    tx.input = ByteString.from_hex("0x" + bytecode)
     tx.from_address = SYSTEM_ADDRESS
 
     tx.facet_block = block
 
     tx.source_hash = FacetTransaction.compute_source_hash(
-      Eth::Util.keccak256(upgrade_intent),
+      ByteString.from_bin(Eth::Util.keccak256(upgrade_intent)),
       L1_INFO_DEPOSIT_SOURCE_DOMAIN
     )
 
@@ -271,31 +272,34 @@ class FacetTransaction < T::Struct
 
   def self.l1_block_proxy_upgrade_tx(block, deployment_nonce)
     # Calculate the implementation address that will be deployed
-    rlp_encoded = Eth::Util.rlp_encode([
+    rlp_encoded = Eth::Rlp.encode([
       SYSTEM_ADDRESS.to_bin,
       deployment_nonce
     ])
-    implementation_address_bytes_32 = Eth::Util.keccak256(rlp_encoded).last(20).rjust(32, "\x00")
-    implementation_address_hex = implementation_address_bytes_32.bytes_to_hex
-    # Create upgradeTo transaction
-    function_selector = Eth::Util.keccak256('upgradeTo(address)').first(4)
-    upgrade_data = function_selector + implementation_address_bytes_32
+    
+    implementation_address_bytes_20 = Eth::Util.keccak256(rlp_encoded).last(20)
+    implementation_address_bytes_32 = Hash32.from_bin(implementation_address_bytes_20.rjust(32, "\x00"))
+    implementation_address_hex = implementation_address_bytes_32.to_hex
+    # Create upgrade(address,address) transaction
+    function_selector = ByteString.from_bin(Eth::Util.keccak256('upgrade(address,address)').first(4))
+    proxy_address_bytes_32 = Hash32.from_bin(L1_INFO_ADDRESS.to_bin.rjust(32, "\x00"))
+    upgrade_data = ByteString.from_bin(function_selector.to_bin + proxy_address_bytes_32.to_bin + implementation_address_bytes_32.to_bin)
 
     upgrade_intent = "upgrade L1Block proxy to Bluebird implementation at #{implementation_address_hex}"
 
     tx = new
     tx.chain_id = ChainIdManager.current_l2_chain_id
-    tx.to_address = L1_BLOCK_ADDRESS
+    tx.to_address = PROXY_ADMIN_ADDRESS
     tx.value = 0
     tx.mint = 0
     tx.gas_limit = 10_000_000
-    tx.input = upgrade_data.bytes_to_hex
+    tx.input = upgrade_data
     tx.from_address = SYSTEM_ADDRESS
 
     tx.facet_block = block
 
     tx.source_hash = FacetTransaction.compute_source_hash(
-      Eth::Util.keccak256(upgrade_intent),
+      ByteString.from_bin(Eth::Util.keccak256(upgrade_intent)),
       L1_INFO_DEPOSIT_SOURCE_DOMAIN
     )
 

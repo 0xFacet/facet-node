@@ -27,6 +27,13 @@ class EthRpcClient
     )
   end
   
+  def get_nonce(address, block_number = "latest")
+    query_api(
+      method: 'eth_getTransactionCount',
+      params: [address, block_number]
+    ).to_i(16)
+  end
+  
   def get_chain_id
     query_api(method: 'eth_chainId').to_i(16)
   end
@@ -148,5 +155,12 @@ class EthRpcClient
       'Accept' => 'application/json',
       'Content-Type' => 'application/json'
     }
+  end
+
+  def get_storage_at(address, slot, block_number = "latest")
+    query_api(
+      method: 'eth_getStorageAt',
+      params: [address, slot, block_number]
+    )
   end
 end
