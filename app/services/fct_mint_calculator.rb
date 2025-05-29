@@ -233,9 +233,9 @@ module FctMintCalculator
       fct_mint_rate = calculate_fct_mint_rate(prev_rate, 1)
     else
       # Normal block processing
-      total_minted = prev_attrs.fetch(:total_fct_minted)
-      period_start_block = prev_attrs.fetch(:current_period_start_block)
-      period_minted = prev_attrs.fetch(:current_period_fct_minted)
+      total_minted = prev_attrs.fetch(:fct_total_minted)
+      period_start_block = prev_attrs.fetch(:fct_period_start_block)
+      period_minted = prev_attrs.fetch(:fct_period_minted)
       fct_mint_rate = prev_attrs.fetch(:fct_mint_rate)
     end
     
@@ -288,10 +288,10 @@ module FctMintCalculator
 
     # Store state for next block - convert to integers only when storing
     facet_block.assign_attributes(
-      total_fct_minted: total_minted.to_i,
+      fct_total_minted: total_minted.to_i,
       fct_mint_rate: fct_mint_rate.to_i,
-      current_period_start_block: period_start_block,
-      current_period_fct_minted: period_minted.to_i
+      fct_period_start_block: period_start_block,
+      fct_period_minted: period_minted.to_i
     )
 
     nil

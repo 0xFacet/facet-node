@@ -4,10 +4,10 @@ RSpec.describe FctMintCalculator do
   # A minimal stub of FacetBlock that supports the fields used by the mint calculator
   class DummyFacetBlock
     attr_accessor :number,
-                  :total_fct_minted,
+                  :fct_total_minted,
                   :fct_mint_rate,
-                  :current_period_start_block,
-                  :current_period_fct_minted
+                  :fct_period_start_block,
+                  :fct_period_minted
 
     def initialize(number:)
       @number = number
@@ -36,9 +36,9 @@ RSpec.describe FctMintCalculator do
       block_num = fork_block + 10
 
       prev_attrs = {
-        total_fct_minted: 1_000,
-        current_period_start_block: fork_block + 5,
-        current_period_fct_minted: 100,
+        fct_total_minted: 1_000,
+        fct_period_start_block: fork_block + 5,
+        fct_period_minted: 100,
         fct_mint_rate: 2,
         base_fee: 10
       }
@@ -51,19 +51,19 @@ RSpec.describe FctMintCalculator do
       FctMintCalculator.assign_mint_amounts([tx], facet_block)
 
       expect(tx.mint).to eq(2_000)
-      expect(facet_block.total_fct_minted).to eq(3_000)
-      expect(facet_block.current_period_fct_minted).to eq(2_100)
+      expect(facet_block.fct_total_minted).to eq(3_000)
+      expect(facet_block.fct_period_minted).to eq(2_100)
       expect(facet_block.fct_mint_rate).to eq(2)
-      expect(facet_block.current_period_start_block).to eq(fork_block + 5)
+      expect(facet_block.fct_period_start_block).to eq(fork_block + 5)
     end
 
     it 'closes the period when the mint cap is hit and starts a new one' do
       block_num = fork_block + 10
 
       prev_attrs = {
-        total_fct_minted: 1_000,
-        current_period_start_block: fork_block + 5,
-        current_period_fct_minted: 4_500, # 500 short of 5_000 cap
+        fct_total_minted: 1_000,
+        fct_period_start_block: fork_block + 5,
+        fct_period_minted: 4_500, # 500 short of 5_000 cap
         fct_mint_rate: 2,
         base_fee: 10
       }
@@ -76,9 +76,9 @@ RSpec.describe FctMintCalculator do
       FctMintCalculator.assign_mint_amounts([tx], facet_block)
 
       expect(tx.mint).to eq(3_250) # 500 to finish old period, 2,750 in new one
-      expect(facet_block.total_fct_minted).to eq(4_250)
-      expect(facet_block.current_period_start_block).to eq(block_num) # new period begins at current block
-      expect(facet_block.current_period_fct_minted).to eq(2_750)
+      expect(facet_block.fct_total_minted).to eq(4_250)
+      expect(facet_block.fct_period_start_block).to eq(block_num) # new period begins at current block
+      expect(facet_block.fct_period_minted).to eq(2_750)
       expect(facet_block.fct_mint_rate).to eq(1) # rate adjusted down by factor 0.5
     end
 
@@ -87,9 +87,9 @@ RSpec.describe FctMintCalculator do
       period_start = block_num - FctMintCalculator::ADJUSTMENT_PERIOD_TARGET_LENGTH.to_i + 1
 
       prev_attrs = {
-        total_fct_minted: 1_000,
-        current_period_start_block: period_start,
-        current_period_fct_minted: 100, # way under target
+        fct_total_minted: 1_000,
+        fct_period_start_block: period_start,
+        fct_period_minted: 100, # way under target
         fct_mint_rate: 2,
         base_fee: 10
       }
@@ -103,16 +103,16 @@ RSpec.describe FctMintCalculator do
 
       expect(tx.mint).to eq(200)
       expect(facet_block.fct_mint_rate).to eq(4) # doubled
-      expect(facet_block.current_period_start_block).to eq(period_start) # block boundary doesn't reset start
+      expect(facet_block.fct_period_start_block).to eq(period_start) # block boundary doesn't reset start
     end
 
     it 'handles multi-period spill-over (spans more than one full period)' do
       block_num = fork_block + 20
 
       prev_attrs = {
-        total_fct_minted: 0,
-        current_period_start_block: block_num - 50,
-        current_period_fct_minted: 0,
+        fct_total_minted: 0,
+        fct_period_start_block: block_num - 50,
+        fct_period_minted: 0,
         fct_mint_rate: 1,
         base_fee: 1
       }
@@ -125,9 +125,9 @@ RSpec.describe FctMintCalculator do
       FctMintCalculator.assign_mint_amounts([tx], facet_block)
 
       expect(tx.mint).to eq(15_000)
-      expect(facet_block.total_fct_minted).to eq(15_000)
-      expect(facet_block.current_period_fct_minted).to eq(5000) # New period starts with 0 after final rollover
-      expect(facet_block.current_period_start_block).to eq(block_num) # new period began this block
+      expect(facet_block.fct_total_minted).to eq(15_000)
+      expect(facet_block.fct_period_minted).to eq(5000) # New period starts with 0 after final rollover
+      expect(facet_block.fct_period_start_block).to eq(block_num) # new period began this block
       expect(facet_block.fct_mint_rate).to eq(1) # rate cannot fall below min
     end
     
@@ -135,9 +135,9 @@ RSpec.describe FctMintCalculator do
       block_num = fork_block + 30
 
       prev_attrs = {
-        total_fct_minted: 49_000,
-        current_period_start_block: block_num - 10,
-        current_period_fct_minted: 0,
+        fct_total_minted: 49_000,
+        fct_period_start_block: block_num - 10,
+        fct_period_minted: 0,
         fct_mint_rate: 1,
         base_fee: 1
       }
@@ -150,9 +150,9 @@ RSpec.describe FctMintCalculator do
       FctMintCalculator.assign_mint_amounts([tx], facet_block)
 
       # After minting, total minted should be 51_000
-      expect(facet_block.total_fct_minted).to eq(51_000)
+      expect(facet_block.fct_total_minted).to eq(51_000)
       # New supply-adjusted target is halved to 2_500
-      expect(FctMintCalculator.calculate_supply_adjusted_target(facet_block.total_fct_minted)).to eq(2_500)
+      expect(FctMintCalculator.calculate_supply_adjusted_target(facet_block.fct_total_minted)).to eq(2_500)
     end
 
     it 'bootstraps correctly on the fork block' do
@@ -169,9 +169,9 @@ RSpec.describe FctMintCalculator do
 
       FctMintCalculator.assign_mint_amounts([], facet_block)
 
-      expect(facet_block.total_fct_minted).to eq(fork_parameters[0])
-      expect(facet_block.current_period_start_block).to eq(block_num)
-      expect(facet_block.current_period_fct_minted).to eq(0)
+      expect(facet_block.fct_total_minted).to eq(fork_parameters[0])
+      expect(facet_block.fct_period_start_block).to eq(block_num)
+      expect(facet_block.fct_period_minted).to eq(0)
       expect(facet_block.fct_mint_rate).to eq(10) # 100/10
     end
 
@@ -179,9 +179,9 @@ RSpec.describe FctMintCalculator do
       block_num = fork_block + 40
 
       prev_attrs = {
-        total_fct_minted: fork_parameters[1] - 50, # only 50 left before cap
-        current_period_start_block: block_num - 5,
-        current_period_fct_minted: 0,
+        fct_total_minted: fork_parameters[1] - 50, # only 50 left before cap
+        fct_period_start_block: block_num - 5,
+        fct_period_minted: 0,
         fct_mint_rate: 5,
         base_fee: 1
       }
@@ -194,7 +194,7 @@ RSpec.describe FctMintCalculator do
       FctMintCalculator.assign_mint_amounts([tx], facet_block)
 
       expect(tx.mint).to eq(50)
-      expect(facet_block.total_fct_minted).to eq(fork_parameters[1])
+      expect(facet_block.fct_total_minted).to eq(fork_parameters[1])
     end
 
     it 'delegates to the legacy calculator for pre-fork blocks' do
@@ -211,9 +211,9 @@ RSpec.describe FctMintCalculator do
 
       # Previous block ended with period_minted exactly equal to the period target
       prev_attrs = {
-        total_fct_minted: 5_000,
-        current_period_start_block: block_num - 1,
-        current_period_fct_minted: 5_000, # exactly at cap
+        fct_total_minted: 5_000,
+        fct_period_start_block: block_num - 1,
+        fct_period_minted: 5_000, # exactly at cap
         fct_mint_rate: 2,
         base_fee: 10
       }
@@ -227,7 +227,7 @@ RSpec.describe FctMintCalculator do
 
       # We expect the period to have rolled, so some mint should occur.
       expect(tx.mint).to be > 0
-      expect(facet_block.current_period_start_block).to eq(block_num) # new period begins this block
+      expect(facet_block.fct_period_start_block).to eq(block_num) # new period begins this block
     end
 
     it 'applies proportional down-adjustment when period ends mid-block' do
@@ -235,9 +235,9 @@ RSpec.describe FctMintCalculator do
       period_start = block_num - 800
 
       prev_attrs = {
-        total_fct_minted: 1_000,
-        current_period_start_block: period_start,
-        current_period_fct_minted: 4_900, # 100 short of 5_000 cap
+        fct_total_minted: 1_000,
+        fct_period_start_block: period_start,
+        fct_period_minted: 4_900, # 100 short of 5_000 cap
         fct_mint_rate: 10,
         base_fee: 1
       }
@@ -262,9 +262,9 @@ RSpec.describe FctMintCalculator do
     
       block_num  = fork_block + 10
       prev_attrs = {
-        total_fct_minted:           0,
-        current_period_start_block: block_num - 5,
-        current_period_fct_minted:  0,
+        fct_total_minted:           0,
+        fct_period_start_block: block_num - 5,
+        fct_period_minted:  0,
         base_fee: 1,
         fct_mint_rate:              10
       }
@@ -281,8 +281,8 @@ RSpec.describe FctMintCalculator do
       FctMintCalculator.assign_mint_amounts([tx], facet_block)
     
       expect(tx.mint).to eq(15_000)                   # 3 × 5 000
-      expect(facet_block.total_fct_minted).to        eq(15_000)
-      expect(facet_block.current_period_fct_minted).to eq(5_000) # fourth period filled
+      expect(facet_block.fct_total_minted).to        eq(15_000)
+      expect(facet_block.fct_period_minted).to eq(5_000) # fourth period filled
       # Rate path: 10 → 5 → 2.5 → 1.25 → stored as 1
       expect(facet_block.fct_mint_rate).to eq(1)
     end

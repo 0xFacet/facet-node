@@ -25,9 +25,9 @@ class FacetBlock < T::Struct
   prop :sequence_number, T.nilable(Integer)
   prop :fct_mint_rate, T.nilable(Integer)
   prop :fct_mint_period_l1_data_gas, T.nilable(Integer)
-  prop :total_fct_minted, T.nilable(Integer)
-  prop :current_period_fct_minted, T.nilable(Integer)
-  prop :current_period_start_block, T.nilable(Integer)
+  prop :fct_total_minted, T.nilable(Integer)
+  prop :fct_period_minted, T.nilable(Integer)
+  prop :fct_period_start_block, T.nilable(Integer)
 
   # Association-like fields
   prop :eth_block, T.nilable(EthBlock)
