@@ -60,11 +60,18 @@ contract L1Block is ISemver, IGasToken {
     /// @notice The current FCT mint rate
     uint128 public fctMintRate;
 
+    /// @custom:deprecated
     /// @notice The cumulative L1 data gas used in the current mint period
     uint128 public fctMintPeriodL1DataGas;
 
-    /// @notice The total FCT minted in the current period
-    uint32 public fctTotalMinted;
+    /// @notice The total FCT minted
+    uint128 public fctTotalMinted;
+    
+    /// @notice First L2 block number of the current mint period
+    uint128 public fctPeriodStartBlock;
+
+    /// @notice Amount of FCT minted so far in the current period
+    uint128 public fctPeriodMinted;
 
     /// @custom:semver 1.4.1-beta.1
     function version() public pure virtual returns (string memory) {
@@ -96,40 +103,6 @@ contract L1Block is ISemver, IGasToken {
         return token != Constants.ETHER;
     }
 
-    /// @custom:legacy
-    /// @notice Updates the L1 block values.
-    /// @param _number         L1 blocknumber.
-    /// @param _timestamp      L1 timestamp.
-    /// @param _basefee        L1 basefee.
-    /// @param _hash           L1 blockhash.
-    /// @param _sequenceNumber Number of L2 blocks since epoch start.
-    /// @param _batcherHash    Versioned hash to authenticate batcher by.
-    /// @param _l1FeeOverhead  L1 fee overhead.
-    /// @param _l1FeeScalar    L1 fee scalar.
-    function setL1BlockValues(
-        uint64 _number,
-        uint64 _timestamp,
-        uint256 _basefee,
-        bytes32 _hash,
-        uint64 _sequenceNumber,
-        bytes32 _batcherHash,
-        uint256 _l1FeeOverhead,
-        uint256 _l1FeeScalar
-    )
-        external
-    {
-        require(msg.sender == DEPOSITOR_ACCOUNT(), "L1Block: only the depositor account can set L1 block values");
-
-        number = _number;
-        timestamp = _timestamp;
-        basefee = _basefee;
-        hash = _hash;
-        sequenceNumber = _sequenceNumber;
-        batcherHash = _batcherHash;
-        l1FeeOverhead = _l1FeeOverhead;
-        l1FeeScalar = _l1FeeScalar;
-    }
-
     /// @notice Updates the L1 block values for an Ecotone upgraded chain.
     /// Params are packed and passed in as raw msg.data instead of ABI to reduce calldata size.
     /// Params are expected to be in the following order:
@@ -142,6 +115,11 @@ contract L1Block is ISemver, IGasToken {
     ///   7. _blobBaseFee        L1 blob base fee.
     ///   8. _hash               L1 blockhash.
     ///   9. _batcherHash        Versioned hash to authenticate batcher by.
+    ///  10. _fctMintRate         Current FCT mint rate.
+    ///  11. _fctMintPeriodL1DataGas  Cumulative L1 data gas used in the current mint period.
+    ///  12. _fctTotalMinted      Total FCT minted so far.
+    ///  13. _fctPeriodStartBlock First L2 block number of the current mint period.
+    ///  14. _fctPeriodMinted     Amount of FCT minted so far in the current period.
     function setL1BlockValuesEcotone() external {
         address depositor = DEPOSITOR_ACCOUNT();
         assembly {
@@ -160,21 +138,26 @@ contract L1Block is ISemver, IGasToken {
             sstore(batcherHash.slot, calldataload(132)) // bytes32
             // fctMintRate (uint128) and fctMintPeriodL1DataGas (uint128)
             sstore(fctMintRate.slot, calldataload(164))
-
-            // fct_total_minted (uint32) at offset 196
-            let data := shr(224, calldataload(196))
-            sstore(fctTotalMinted.slot, data)
+            // fctTotalMinted (uint128) and fctPeriodStartBlock (uint128)
+            sstore(fctTotalMinted.slot, calldataload(196))
+            // fctPeriodMinted (uint128)
+            sstore(fctPeriodMinted.slot, calldataload(228))
         }
     }
-
-    /// @notice Sets the gas paying token for the L2 system. Can only be called by the special
-    ///         depositor account. This function is not called on every L2 block but instead
-    ///         only called by specially crafted L1 deposit transactions.
-    function setGasPayingToken(address _token, uint8 _decimals, bytes32 _name, bytes32 _symbol) external {
-        if (msg.sender != DEPOSITOR_ACCOUNT()) revert NotDepositor();
-
-        GasPayingToken.set({ _token: _token, _decimals: _decimals, _name: _name, _symbol: _symbol });
-
-        emit GasPayingTokenSet({ token: _token, decimals: _decimals, name: _name, symbol: _symbol });
+    
+    struct FctDetails {
+        uint128 mintRate;
+        uint128 totalMinted;
+        uint128 periodStartBlock;
+        uint128 periodMinted;
+    }
+    
+    function fctDetails() external view returns (FctDetails memory) {
+        return FctDetails({
+            mintRate: fctMintRate,
+            totalMinted: fctTotalMinted,
+            periodStartBlock: fctPeriodStartBlock,
+            periodMinted: fctPeriodMinted
+        });
     }
 }

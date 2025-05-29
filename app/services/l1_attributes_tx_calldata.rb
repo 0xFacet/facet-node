@@ -10,6 +10,14 @@ module L1AttributesTxCalldata
     blob_base_fee = 1
     batcher_hash = "\x00" * 32
     
+    if SysConfig.is_bluebird?(facet_block)
+      unless facet_block.fct_mint_period_l1_data_gas.nil?
+        raise "fct_mint_period_l1_data_gas not used after fork"
+      end
+      
+      facet_block.fct_mint_period_l1_data_gas = 0
+    end
+    
     packed_data = [
       FUNCTION_SELECTOR,
       Eth::Util.zpad_int(base_fee_scalar, 4),
@@ -25,10 +33,22 @@ module L1AttributesTxCalldata
       Eth::Util.zpad_int(facet_block.fct_mint_rate, 16)
     ]
     
-    # Only include fct_total_minted if we're at or past fork block
-    if facet_block.number >= SysConfig.bluebird_fork_block_number
-      raise "fct_total_minted required after fork" if facet_block.fct_total_minted.nil?
-      packed_data << Eth::Util.zpad_int(facet_block.fct_total_minted, 4)
+    # Bluebird fork introduces extra FCT-related fields that must be packed.
+    # Layout for each 32-byte word (big-endian):
+    #   word 1 (offset 160): [fct_mint_period_l1_data_gas(16B)] [fct_mint_rate(16B)]
+    #   word 2 (offset 192): [fct_period_start_block(16B)]      [fct_total_minted(16B)]
+    #   word 3 (offset 224): [reserved / 0(16B)]                 [fct_period_minted(16B)]
+    if SysConfig.is_bluebird?(facet_block)
+      %i[fct_total_minted fct_period_start_block fct_period_minted].each do |field|
+        raise "#{field} required after fork" if facet_block.send(field).nil?
+      end
+
+      # word 2
+      packed_data << Eth::Util.zpad_int(facet_block.fct_period_start_block, 16)
+      packed_data << Eth::Util.zpad_int(facet_block.fct_total_minted, 16)
+
+      # word 3 (upper 128 bits reserved as zero for now)
+      packed_data << Eth::Util.zpad_int(facet_block.fct_period_minted, 32)
     end
     
     ByteString.from_bin(packed_data.join)
@@ -69,9 +89,16 @@ module L1AttributesTxCalldata
     }
     
     # Only decode fct_total_minted if at or past fork block
-    if facet_block_number >= SysConfig.bluebird_fork_block_number
-      raise "Missing fct_total_minted data after fork" unless data.length >= 196
-      result[:fct_total_minted] = data[192...196].unpack1('N')
+    if SysConfig.is_bluebird?(facet_block_number)
+      raise "Insufficient calldata length after fork" unless data.length >= 256
+      raise "Invalid data gas" unless fct_mint_period_l1_data_gas.zero?
+
+      # word 2 : offsets 192..224 (32 bytes)
+      result[:fct_period_start_block] = data[192...208].unpack1('H*').to_i(16)
+      result[:fct_total_minted]  = data[208...224].unpack1('H*').to_i(16)
+
+      # word 3 : offsets 224..256 (32 bytes)
+      result[:fct_period_minted] = data[240...256].unpack1('H*').to_i(16)
     end
 
     result.with_indifferent_access

@@ -43,6 +43,12 @@ module SysConfig
     block.number == bluebird_fork_block_number
   end
   
+  def is_bluebird?(block)
+    number = block.is_a?(Integer) ? block : block.number
+    
+    number >= bluebird_fork_block_number
+  end
+  
   def is_first_v2_block?(block)
     block.number == 1
   end
