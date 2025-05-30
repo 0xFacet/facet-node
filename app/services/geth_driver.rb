@@ -66,21 +66,7 @@ module GethDriver
     end
 
     if new_facet_block.number == 2
-      first_block_receipts = EthRpcClient.l2.get_block_receipts(1)
-      
-      failed_system_txs = first_block_receipts.select do |receipt|
-        FacetTransaction::SYSTEM_ADDRESS == Address20.from_hex(receipt['from']) &&
-        receipt['status'] != '0x1'
-      end
-      
-      unless failed_system_txs.empty?
-        failed_system_txs.each do |tx|
-          trace = EthRpcClient.l2.trace_transaction(tx['transactionHash'])
-          ap trace
-        end
-        
-        raise "First v2 block system transactions did not execute successfully"
-      end
+      check_failed_system_txs(1, "First v2 block")
     end
     
     # Add L1Block implementation deployment and upgrade at fork block
@@ -95,21 +81,7 @@ module GethDriver
     end
     
     if new_facet_block.number == SysConfig.bluebird_fork_block_number
-      bluebird_receipts = EthRpcClient.l2.get_block_receipts(SysConfig.bluebird_fork_block_number - 1)
-      
-      failed_system_txs = bluebird_receipts.select do |receipt|
-        FacetTransaction::SYSTEM_ADDRESS == Address20.from_hex(receipt['from']) &&
-        receipt['status'] != '0x1'
-      end
-      
-      unless failed_system_txs.empty?
-        failed_system_txs.each do |tx|
-          trace = EthRpcClient.l2.trace_transaction(tx['transactionHash'])
-          ap trace
-        end
-        
-        raise "Bluebird fork block system transactions did not execute successfully"
-      end
+      check_failed_system_txs(SysConfig.bluebird_fork_block_number - 1, "Bluebird fork block")
     end
     
     transactions_with_attributes = system_txs + transactions
@@ -328,5 +300,22 @@ module GethDriver
       debug: true,
       tracer: "callTracer"
     }])
+  end
+
+  def check_failed_system_txs(block_to_check, context)
+    receipts = EthRpcClient.l2.get_block_receipts(block_to_check)
+    
+    failed_system_txs = receipts.select do |receipt|
+      FacetTransaction::SYSTEM_ADDRESS == Address20.from_hex(receipt['from']) &&
+      receipt['status'] != '0x1'
+    end
+
+    unless failed_system_txs.empty?
+      failed_system_txs.each do |tx|
+        trace = EthRpcClient.l2.trace_transaction(tx['transactionHash'])
+        ap trace
+      end
+      raise "#{context} system transactions did not execute successfully"
+    end
   end
 end
