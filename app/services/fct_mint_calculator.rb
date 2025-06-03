@@ -136,7 +136,7 @@ module FctMintCalculator
       period_start_block: period_start_block
     )
 
-    engine.assign_mint_amounts(facet_txs, current_l1_base_fee) rescue binding.irb
+    engine.assign_mint_amounts(facet_txs, current_l1_base_fee)
 
     facet_block.assign_attributes(
       fct_total_minted:      engine.total_minted.to_i,
