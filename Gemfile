@@ -1,6 +1,6 @@
 source "https://rubygems.org"
 
-ruby "3.3.4"
+ruby "3.4.4"
 
 # Bundle edge Rails instead: gem "rails", github: "rails/rails", branch: "main"
 gem "rails", "7.1.3.4"
@@ -42,6 +42,7 @@ gem "pry", "~> 0.14.2"
 gem "rspec", "~> 3.13"
 
 gem "awesome_print", "~> 1.9"
+gem 'keccak', '~> 1.3'
 
 gem "eth", github: "0xFacet/eth.rb"
 
@@ -64,8 +65,6 @@ gem "clockwork", "~> 3.0"
 gem "airbrake", "~> 13.0"
 gem "clipboard", "~> 2.0", :group => [:development, :test]
 gem "order_query", "~> 0.5.3"
-
-gem "diffy", "~> 3.4"
 
 gem "parallel", "~> 1.25"
 
