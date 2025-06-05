@@ -147,4 +147,24 @@ module FctMintCalculator
 
     engine
   end
+
+  def issuance_on_pace_delta(block_number)
+    attrs = client.get_l1_attributes(block_number)
+
+    actual_total = if attrs && attrs[:fct_total_minted]
+      attrs[:fct_total_minted].to_r
+    else
+      # Fallback for legacy blocks where total minted wasn't tracked per block
+      calculate_historical_total(block_number)
+    end
+
+    supply_target_first_halving = max_supply.to_r / 2
+    actual_fraction = Rational(actual_total, supply_target_first_halving)
+
+    time_fraction = Rational(block_number) / TARGET_NUM_BLOCKS_IN_HALVING
+    raise "Time fraction is zero" if time_fraction.zero?
+
+    ratio = actual_fraction / time_fraction
+    (ratio - 1).to_f.round(5)
+  end
 end
