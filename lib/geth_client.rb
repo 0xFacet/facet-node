@@ -23,6 +23,7 @@ class GethClient
   end
   alias :send_command :call
 
+  sig { params(l2_block_number: Integer).returns(Hash) }
   def get_l1_attributes(l2_block_number)
     if l2_block_number > 0
       l2_block = EthRpcClient.l2.call("eth_getBlockByNumber", ["0x#{l2_block_number.to_s(16)}", true])

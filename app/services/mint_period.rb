@@ -120,4 +120,4 @@ class MintPeriod
     raw_new_rate = prev_rate.to_r * adjustment_factor
     raw_new_rate.clamp(FctMintCalculator::MIN_MINT_RATE, FctMintCalculator::MAX_MINT_RATE)
   end
-end 
+end

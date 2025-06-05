@@ -69,3 +69,6 @@ gem "order_query", "~> 0.5.3"
 gem "parallel", "~> 1.25"
 
 gem "net-http-persistent", "~> 4.0"
+
+gem 'benchmark'
+gem 'ostruct'

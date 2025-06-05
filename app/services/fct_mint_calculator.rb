@@ -48,7 +48,7 @@ module FctMintCalculator
     
     # Process all completed periods
     while current_period_end < block_number
-      attributes = client.get_l1_attributes(current_period_end)
+      attributes = client.get_l1_attributes(current_period_end.to_i)
       
       if attributes && attributes[:fct_mint_period_l1_data_gas]
         total += attributes[:fct_mint_period_l1_data_gas] * attributes[:fct_mint_rate]
