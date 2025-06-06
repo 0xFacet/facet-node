@@ -52,7 +52,7 @@ class MintPeriod
     end
     
     facet_txs.each do |tx|
-      burn = tx.l1_data_gas_used * current_l1_base_fee
+      burn = tx.l1_data_gas_used(block_num) * current_l1_base_fee
       tx.mint = consume_eth(burn).to_i
     end
   end

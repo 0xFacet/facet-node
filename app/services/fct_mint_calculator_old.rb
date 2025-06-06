@@ -66,10 +66,10 @@ module FctMintCalculatorOld
     new_rate = compute_new_rate(facet_block, prev_rate, cumulative_l1_data_gas)
     
     facet_txs.each do |tx|
-      tx.mint = tx.l1_data_gas_used * new_rate
+      tx.mint = tx.l1_data_gas_used(facet_block.number) * new_rate
     end
     
-    batch_l1_data_gas = facet_txs.sum(&:l1_data_gas_used)
+    batch_l1_data_gas = facet_txs.sum { |tx| tx.l1_data_gas_used(facet_block.number) }
     
     if is_first_block_in_period?(facet_block)
       new_cumulative_l1_data_gas = batch_l1_data_gas

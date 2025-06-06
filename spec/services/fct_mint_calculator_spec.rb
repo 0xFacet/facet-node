@@ -33,6 +33,12 @@ RSpec.describe FctMintCalculator do
     allow(FctMintCalculator).to receive(:client).and_return(client_double)
   end
 
+  def build_tx(burn_tokens)
+    tx = OpenStruct.new
+    tx.define_singleton_method(:l1_data_gas_used) { |_blk_num| burn_tokens }
+    tx
+  end
+
   context 'post-fork minting logic' do
     it 'mints within the current period without closing it' do
       block_num = fork_block + 10
@@ -47,7 +53,7 @@ RSpec.describe FctMintCalculator do
       allow(client_double).to receive(:get_l1_attributes).with(block_num - 1).and_return(prev_attrs)
 
       facet_block = DummyFacetBlock.new(number: block_num, eth_block_base_fee_per_gas: 10)
-      tx = OpenStruct.new(l1_data_gas_used: 100)
+      tx = build_tx(100)
 
       FctMintCalculator.assign_mint_amounts([tx], facet_block)
 
@@ -72,7 +78,7 @@ RSpec.describe FctMintCalculator do
       allow(client_double).to receive(:get_l1_attributes).with(block_num - 1).and_return(prev_attrs)
 
       facet_block = DummyFacetBlock.new(number: block_num, eth_block_base_fee_per_gas: 10)
-      tx = OpenStruct.new(l1_data_gas_used: 200) # burns 2_000 wei ETH, = 4_000 potential mint
+      tx = build_tx(200) # burns 2_000 wei ETH, = 4_000 potential mint
 
       FctMintCalculator.assign_mint_amounts([tx], facet_block)
 
@@ -100,7 +106,7 @@ RSpec.describe FctMintCalculator do
       allow(client_double).to receive(:get_l1_attributes).with(block_num - 1).and_return(prev_attrs)
 
       facet_block = DummyFacetBlock.new(number: block_num, eth_block_base_fee_per_gas: 10)
-      tx = OpenStruct.new(l1_data_gas_used: 10) # burns 100 wei ETH
+      tx = build_tx(10) # burns 100 wei ETH
 
       FctMintCalculator.assign_mint_amounts([tx], facet_block)
 
@@ -124,7 +130,7 @@ RSpec.describe FctMintCalculator do
       allow(client_double).to receive(:get_l1_attributes).with(block_num - 1).and_return(prev_attrs)
 
       facet_block = DummyFacetBlock.new(number: block_num, eth_block_base_fee_per_gas: 1)
-      tx = OpenStruct.new(l1_data_gas_used: 500_000) # burns 500k wei, spans multiple periods
+      tx = build_tx(500_000) # burns 500k wei, spans multiple periods
 
       FctMintCalculator.assign_mint_amounts([tx], facet_block)
 
@@ -148,7 +154,7 @@ RSpec.describe FctMintCalculator do
       allow(client_double).to receive(:get_l1_attributes).with(block_num - 1).and_return(prev_attrs)
 
       facet_block = DummyFacetBlock.new(number: block_num, eth_block_base_fee_per_gas: 1)
-      tx = OpenStruct.new(l1_data_gas_used: 2_000_000) # crosses 50% (first halving) threshold
+      tx = build_tx(2_000_000) # crosses 50% (first halving) threshold
 
       engine = FctMintCalculator.assign_mint_amounts([tx], facet_block)
 
@@ -191,7 +197,7 @@ RSpec.describe FctMintCalculator do
       allow(client_double).to receive(:get_l1_attributes).with(block_num - 1).and_return(prev_attrs)
 
       facet_block = DummyFacetBlock.new(number: block_num, eth_block_base_fee_per_gas: 1)
-      tx = OpenStruct.new(l1_data_gas_used: 1_000) # burns 1000 wei, would mint 5_000 but only 50 remain
+      tx = build_tx(1_000) # burns 1000 wei, would mint 5_000 but only 50 remain
       
       FctMintCalculator.assign_mint_amounts([tx], facet_block)
 
@@ -202,7 +208,7 @@ RSpec.describe FctMintCalculator do
     it 'delegates to the legacy calculator for pre-fork blocks' do
       legacy_block_num = fork_block - 1
       facet_block = DummyFacetBlock.new(number: legacy_block_num, eth_block_base_fee_per_gas: 1)
-      tx = OpenStruct.new(l1_data_gas_used: 0)
+      tx = build_tx(0)
 
       expect(FctMintCalculatorOld).to receive(:assign_mint_amounts).with([tx], facet_block)
       FctMintCalculator.assign_mint_amounts([tx], facet_block)
@@ -222,7 +228,7 @@ RSpec.describe FctMintCalculator do
       allow(client_double).to receive(:get_l1_attributes).with(block_num - 1).and_return(prev_attrs)
 
       facet_block = DummyFacetBlock.new(number: block_num, eth_block_base_fee_per_gas: 10)
-      tx = OpenStruct.new(l1_data_gas_used: 100)
+      tx = build_tx(100)
 
       FctMintCalculator.assign_mint_amounts([tx], facet_block)
 
@@ -245,7 +251,7 @@ RSpec.describe FctMintCalculator do
       allow(client_double).to receive(:get_l1_attributes).with(block_num - 1).and_return(prev_attrs)
 
       facet_block = DummyFacetBlock.new(number: block_num, eth_block_base_fee_per_gas: 1)
-      tx = OpenStruct.new(l1_data_gas_used: 101) # exactly fills the cap
+      tx = build_tx(101) # exactly fills the cap
 
       FctMintCalculator.assign_mint_amounts([tx], facet_block)
       
@@ -270,7 +276,7 @@ RSpec.describe FctMintCalculator do
       facet_block = DummyFacetBlock.new(number: block_num, eth_block_base_fee_per_gas: 1)
     
       # Large burn that will span multiple periods
-      tx = OpenStruct.new(l1_data_gas_used: 400_000) # 400k wei burned
+      tx = build_tx(400_000) # 400k wei burned
     
       FctMintCalculator.assign_mint_amounts([tx], facet_block)
     
@@ -295,7 +301,7 @@ RSpec.describe FctMintCalculator do
       allow(client_double).to receive(:get_l1_attributes).with(block_num - 1).and_return(prev_attrs)
       
       facet_block = DummyFacetBlock.new(number: block_num, eth_block_base_fee_per_gas: 20)
-      tx = OpenStruct.new(l1_data_gas_used: 1_000)
+      tx = build_tx(1_000)
       
       FctMintCalculator.assign_mint_amounts([tx], facet_block)
       
@@ -317,7 +323,7 @@ RSpec.describe FctMintCalculator do
       allow(client_double).to receive(:get_l1_attributes).with(block_num - 1).and_return(prev_attrs)
       
       facet_block = DummyFacetBlock.new(number: block_num, eth_block_base_fee_per_gas: 1)
-      tx = OpenStruct.new(l1_data_gas_used: 100) # Will cause target to be exceeded
+      tx = build_tx(100) # Will cause target to be exceeded
       
       FctMintCalculator.assign_mint_amounts([tx], facet_block)
       
@@ -361,7 +367,7 @@ RSpec.describe FctMintCalculator do
       allow(client_double).to receive(:get_l1_attributes).with(block_num - 1).and_return(prev_attrs)
       
       facet_block = DummyFacetBlock.new(number: block_num, eth_block_base_fee_per_gas: 1)
-      tx = OpenStruct.new(l1_data_gas_used: 10)
+      tx = build_tx(10)
       
       FctMintCalculator.assign_mint_amounts([tx], facet_block)
       
@@ -388,7 +394,7 @@ RSpec.describe FctMintCalculator do
         .and_return(prev_attrs)
 
       facet_block = DummyFacetBlock.new(number: block_num, eth_block_base_fee_per_gas: 10)
-      tx          = OpenStruct.new(l1_data_gas_used: 50) # small burn => 1_000 FCT @ rate varies after adjustment
+      tx          = build_tx(50) # small burn => 1_000 FCT @ rate varies after adjustment
 
       FctMintCalculator.assign_mint_amounts([tx], facet_block)
 
@@ -442,7 +448,7 @@ RSpec.describe FctMintCalculator do
       
       facet_block = DummyFacetBlock.new(number: block_num, eth_block_base_fee_per_gas: 1)
       # Burn enough to complete many periods
-      tx = OpenStruct.new(l1_data_gas_used: 1_000_000)
+      tx = build_tx(1_000_000)
       
       FctMintCalculator.assign_mint_amounts([tx], facet_block)
       
@@ -466,7 +472,7 @@ RSpec.describe FctMintCalculator do
       allow(client_double).to receive(:get_l1_attributes).with(block_num - 1).and_return(prev_attrs)
       
       facet_block = DummyFacetBlock.new(number: block_num, eth_block_base_fee_per_gas: 1)
-      tx = OpenStruct.new(l1_data_gas_used: 100)
+      tx = build_tx(100)
       
       FctMintCalculator.assign_mint_amounts([tx], facet_block)
       
@@ -489,7 +495,7 @@ RSpec.describe FctMintCalculator do
       
       facet_block = DummyFacetBlock.new(number: block_num, eth_block_base_fee_per_gas: 1)
       # Massive burn that crosses both 50% and 75% thresholds
-      tx = OpenStruct.new(l1_data_gas_used: 200_000_000) # Burns 200M wei
+      tx = build_tx(200_000_000) # Burns 200M wei
       
       engine = FctMintCalculator.assign_mint_amounts([tx], facet_block)
       
@@ -513,7 +519,7 @@ RSpec.describe FctMintCalculator do
       allow(client_double).to receive(:get_l1_attributes).with(block_num - 1).and_return(prev_attrs)
       
       facet_block = DummyFacetBlock.new(number: block_num, eth_block_base_fee_per_gas: 1)
-      tx = OpenStruct.new(l1_data_gas_used: 2) # Exactly crosses threshold
+      tx = build_tx(2) # Exactly crosses threshold
       
       engine = FctMintCalculator.assign_mint_amounts([tx], facet_block)
       
@@ -537,7 +543,7 @@ RSpec.describe FctMintCalculator do
       allow(client_double).to receive(:get_l1_attributes).with(block_num - 1).and_return(prev_attrs)
       
       facet_block = DummyFacetBlock.new(number: block_num, eth_block_base_fee_per_gas: 1)
-      tx = OpenStruct.new(l1_data_gas_used: 1000) # Would mint 1000 FCT normally
+      tx = build_tx(1000) # Would mint 1000 FCT normally
       
       FctMintCalculator.assign_mint_amounts([tx], facet_block)
       
@@ -559,7 +565,7 @@ RSpec.describe FctMintCalculator do
       allow(client_double).to receive(:get_l1_attributes).with(block_num - 1).and_return(prev_attrs)
       
       facet_block = DummyFacetBlock.new(number: block_num, eth_block_base_fee_per_gas: 1)
-      tx = OpenStruct.new(l1_data_gas_used: 10)
+      tx = build_tx(10)
       
       FctMintCalculator.assign_mint_amounts([tx], facet_block)
       
@@ -580,7 +586,7 @@ RSpec.describe FctMintCalculator do
       allow(client_double).to receive(:get_l1_attributes).with(block_num - 1).and_return(prev_attrs)
       
       facet_block = DummyFacetBlock.new(number: block_num, eth_block_base_fee_per_gas: 0) # Zero base fee
-      tx = OpenStruct.new(l1_data_gas_used: 1000)
+      tx = build_tx(1000)
       
       FctMintCalculator.assign_mint_amounts([tx], facet_block)
       
@@ -602,7 +608,7 @@ RSpec.describe FctMintCalculator do
       allow(client_double).to receive(:get_l1_attributes).with(block_num - 1).and_return(prev_attrs)
       
       facet_block = DummyFacetBlock.new(number: block_num, eth_block_base_fee_per_gas: 1)
-      tx = OpenStruct.new(l1_data_gas_used: 10)
+      tx = build_tx(10)
       
       FctMintCalculator.assign_mint_amounts([tx], facet_block)
       

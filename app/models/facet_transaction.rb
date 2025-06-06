@@ -3,9 +3,9 @@ class FacetTransaction < T::Struct
   include AttrAssignable
 
   prop :chain_id, T.nilable(Integer)
-  prop :l1_data_gas_used, T.nilable(Integer)
   prop :contract_initiated, T.nilable(T::Boolean)
   prop :eth_transaction_hash, T.nilable(Hash32)
+  prop :eth_transaction_input, T.nilable(ByteString)
   prop :eth_call_index, T.nilable(Integer)
   prop :block_hash, T.nilable(Hash32)
   prop :block_number, T.nilable(Integer)
@@ -38,32 +38,6 @@ class FacetTransaction < T::Struct
   MIGRATION_MANAGER_ADDRESS = Address20.from_hex("0x22220000000000000000000000000000000000d6")
   PROXY_ADMIN_ADDRESS = Address20.from_hex("0x4200000000000000000000000000000000000018")
   
-  def self.from_ethscription(ethscription)
-    tx = new
-    tx.ethscription = ethscription
-    tx.chain_id = ChainIdManager.current_l2_chain_id
-    tx.to_address = ethscription.facet_tx_to
-    tx.value = 0
-    tx.input = ethscription.facet_tx_input
-    
-    tx.eth_transaction_hash = ethscription.transaction_hash
-    tx.from_address = ethscription.creator
-    
-    tx.contract_initiated = ethscription.contract_initiated
-    
-    payload = [
-      ethscription.block_hash.to_bin,
-      ethscription.transaction_hash.to_bin,
-      Eth::Util.zpad_int(0, 32)
-    ].join
-    
-    tx.source_hash = FacetTransaction.compute_source_hash(
-      ByteString.from_bin(payload),
-      USER_DEPOSIT_SOURCE_DOMAIN
-    )
-    
-    tx
-  end
   
   sig { params(tx_count_in_block: Integer).returns(Integer) }
   def assign_gas_limit_from_tx_count_in_block(tx_count_in_block)
@@ -71,15 +45,21 @@ class FacetTransaction < T::Struct
     self.gas_limit = block_gas_limit / (tx_count_in_block + 1) # Attributes tx
   end
   
-  sig { params(hex_string: ByteString, contract_initiated: T::Boolean).returns(Integer) }
-  def self.calculate_data_gas_used(hex_string, contract_initiated:)
-    bytes = hex_string.to_bin
+  sig { params(facet_block_number: Integer).returns(Integer) }
+  def l1_data_gas_used(facet_block_number)
+    bytes = eth_transaction_input.to_bin
+
+    # Contract-initiated txs use the old 8-gas-per-byte rule regardless of fork
+    return bytes.bytesize * 8 if contract_initiated
+
     zero_count = bytes.count("\x00")
     non_zero_count = bytes.bytesize - zero_count
-    
-    if contract_initiated
-      bytes.bytesize * 8
+
+    if SysConfig.is_bluebird?(facet_block_number)
+      # EIP-7623 floor pricing: 10 gas per zero byte, 40 gas per non-zero byte
+      zero_count * 10 + non_zero_count * 40
     else
+      # Pre-Bluebird 4/16 pricing
       zero_count * 4 + non_zero_count * 16
     end
   end
@@ -87,18 +67,16 @@ class FacetTransaction < T::Struct
   sig { params(
     contract_initiated: T::Boolean,
     from_address: Address20,
-    input: ByteString,
-    tx_hash: Hash32,
-    block_hash: Hash32
+    eth_transaction_input: ByteString,
+    tx_hash: Hash32
   ).returns(T.nilable(FacetTransaction)) }
   def self.from_payload(
     contract_initiated:,
     from_address:,
-    input:,
-    tx_hash:,
-    block_hash:
+    eth_transaction_input:,
+    tx_hash:
   )
-    hex = input.to_hex
+    hex = eth_transaction_input.to_hex
     
     hex = Eth::Util.remove_hex_prefix hex
     type = hex[0, 2]
@@ -139,6 +117,8 @@ class FacetTransaction < T::Struct
     data = ByteString.from_bin(tx[4])
 
     tx = new
+    tx.eth_transaction_input = eth_transaction_input
+    
     tx.chain_id = clamp_uint(chain_id, 256)
     tx.to_address = to
     tx.value = clamp_uint(value, 256)
@@ -149,11 +129,6 @@ class FacetTransaction < T::Struct
     tx.from_address = from_address
     
     tx.contract_initiated = contract_initiated
-    
-    tx.l1_data_gas_used = calculate_data_gas_used(
-      input,
-      contract_initiated: tx.contract_initiated
-    )
     
     tx.source_hash = tx_hash
     

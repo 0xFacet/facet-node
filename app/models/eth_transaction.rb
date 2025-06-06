@@ -63,9 +63,8 @@ class EthTransaction < T::Struct
     FacetTransaction.from_payload(
       contract_initiated: false,
       from_address: from_address,
-      input: input,
-      tx_hash: tx_hash,
-      block_hash: block_hash
+      eth_transaction_input: input,
+      tx_hash: tx_hash
     )
   end
   
@@ -75,9 +74,8 @@ class EthTransaction < T::Struct
       facet_tx = FacetTransaction.from_payload(
         contract_initiated: true,
         from_address: Address20.from_hex(log['address']),
-        input: ByteString.from_hex(log['data']),
-        tx_hash: tx_hash,
-        block_hash: block_hash
+        eth_transaction_input: ByteString.from_hex(log['data']),
+        tx_hash: tx_hash
       )
       return facet_tx if facet_tx
     end
