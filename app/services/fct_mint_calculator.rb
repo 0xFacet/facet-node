@@ -119,7 +119,7 @@ module FctMintCalculator
       
       fct_mint_rate = Rational(
         prev_attrs.fetch(:fct_mint_rate),
-        prev_attrs.fetch(:base_fee)
+        prev_attrs.fetch(:base_fee) # NOTE: Base fee is never zero.
       )
     else
       total_minted = prev_attrs.fetch(:fct_total_minted)

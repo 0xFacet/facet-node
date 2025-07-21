@@ -198,6 +198,10 @@ class FacetTransaction < T::Struct
   end
   
   def deposit_tx_type
+    unless facet_block.present?
+      raise "Facet block is required to determine deposit tx type"
+    end
+    
     if SysConfig.is_bluebird?(facet_block.number)
       0x7D
     else

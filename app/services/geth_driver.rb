@@ -255,6 +255,7 @@ module GethDriver
       "--nocompaction",
       "--rollup.enabletxpooladmission=false",
       "--rollup.disabletxpoolgossip",
+      "--override.bluebird", SysConfig.bluebird_fork_time_stamp.to_s,
       "console"
     ].join(' ')
 

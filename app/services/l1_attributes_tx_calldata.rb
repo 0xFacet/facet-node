@@ -15,6 +15,7 @@ module L1AttributesTxCalldata
         raise "fct_mint_period_l1_data_gas not used after fork"
       end
       
+      # Set to constant zero because we can't remove it from the contract
       facet_block.fct_mint_period_l1_data_gas = 0
     end
     
