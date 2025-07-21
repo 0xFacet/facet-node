@@ -32,7 +32,6 @@ module SysConfig
     @_genesis_timestamp ||= EthRpcClient.l1.get_block(l1_genesis_block_number)["timestamp"].to_i(16)
   end
   
-  # TODO: Sepolia v. Mainnet
   def bluebird_fork_block_number
     fork_time = bluebird_fork_time_stamp
     fork_time = genesis_timestamp if fork_time.zero?
@@ -54,11 +53,17 @@ module SysConfig
   end
   
   def timestamp_from_block_number(block_number)
-    genesis_timestamp + (block_number * L2_BLOCK_TIME)
+    genesis_timestamp + (Integer(block_number) * L2_BLOCK_TIME)
   end
   
   def bluebird_fork_time_stamp
-    SysConfig.timestamp_from_block_number(20)
+    if ENV['BLUEBIRD_TIMESTAMP'].present?
+      Integer(ENV['BLUEBIRD_TIMESTAMP'])
+    elsif ENV['BLUEBIRD_L2_BLOCK'].present?
+      SysConfig.timestamp_from_block_number(ENV['BLUEBIRD_L2_BLOCK'])
+    else
+      raise "BLUEBIRD_TIMESTAMP or BLUEBIRD_L2_BLOCK must be set"
+    end
   end
   
   def is_bluebird_fork_block?(block)
