@@ -15,7 +15,7 @@ module FacetTransactionHelper
         input: ByteString.from_hex(tx_params[:input]),
         chain_id: 1,
         from_address: Address20.from_hex(tx_params[:from_address] || "0x" + "2" * 40),
-        to_address: FacetTransaction::FACET_INBOX_ADDRESS,
+        to_address: EthTransaction::FACET_INBOX_ADDRESS,
         status: 1,
         logs: tx_params[:events] || []
       )

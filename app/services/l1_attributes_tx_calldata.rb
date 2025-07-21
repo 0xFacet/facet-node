@@ -6,7 +6,7 @@ module L1AttributesTxCalldata
   sig { params(facet_block: FacetBlock).returns(ByteString) }
   def build(facet_block)
     base_fee_scalar = 0
-    blob_base_fee_scalar = 1
+    blob_base_fee_scalar = 1 # TODO: use real values
     blob_base_fee = 1
     batcher_hash = "\x00" * 32
     

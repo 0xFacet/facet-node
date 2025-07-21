@@ -1,7 +1,6 @@
 module SysConfig
   extend self
   
-  FACET_INBOX_ADDRESS = Address20.from_hex("0x00000000000000000000000000000000000face7")
   L2_BLOCK_GAS_LIMIT = Integer(ENV.fetch('L2_BLOCK_GAS_LIMIT', 200_000_000))
   L2_BLOCK_TIME = 12
   
@@ -33,10 +32,33 @@ module SysConfig
     @_genesis_timestamp ||= EthRpcClient.l1.get_block(l1_genesis_block_number)["timestamp"].to_i(16)
   end
   
-  # NOTE: This *must* be a multiple of 10k
   # TODO: Sepolia v. Mainnet
   def bluebird_fork_block_number
-    1_200_000
+    fork_time = bluebird_fork_time_stamp
+    fork_time = genesis_timestamp if fork_time.zero?
+    
+    delta = fork_time - genesis_timestamp
+    raise ArgumentError, "Bluebird fork timestamp (#{fork_time}) must be greater than genesis timestamp (#{genesis_timestamp})" if delta.negative?
+
+    unless (delta % L2_BLOCK_TIME).zero?
+      raise ArgumentError, "Bluebird fork timestamp (#{fork_time}) must align with L2 block time of #{L2_BLOCK_TIME} seconds"
+    end
+
+    block_num = delta / L2_BLOCK_TIME
+
+    unless block_num.multiple_of?(10_000) || !Rails.env.production? # TODO: Remove this once we're on mainnet
+      raise ArgumentError, "Bluebird fork block number (#{block_num}) must be a multiple of 10,000"
+    end
+
+    block_num
+  end
+  
+  def timestamp_from_block_number(block_number)
+    genesis_timestamp + (block_number * L2_BLOCK_TIME)
+  end
+  
+  def bluebird_fork_time_stamp
+    SysConfig.timestamp_from_block_number(20)
   end
   
   def is_bluebird_fork_block?(block)
