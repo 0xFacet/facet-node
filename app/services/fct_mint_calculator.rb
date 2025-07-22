@@ -71,8 +71,15 @@ module FctMintCalculator
   end
 
   def compute_bluebird_fork_block_params(block_number)
-    # This assumes the fork is before the first halving, which it will be.
-    
+    # Immediate-fork path (timestamp 0 → block 2)
+    if SysConfig.bluebird_immediate_fork?
+      total_minted   = 0                       # nothing minted pre-fork
+      max_supply     = Integer(ENV.fetch('BLUEBIRD_IMMEDIATE_FORK_MAX_SUPPLY_ETHER')).ether
+      initial_target = (max_supply / 2) / TARGET_NUM_PERIODS_IN_HALVING
+      return [total_minted, max_supply.to_i, initial_target.to_i]
+    end
+
+    # Scheduled-fork path (≥ 10 000 and < first halving)
     # Get actual total minted FCT up to fork
     total_minted = calculate_historical_total(block_number)
     

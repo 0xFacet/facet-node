@@ -34,8 +34,6 @@ module SysConfig
   
   def bluebird_fork_block_number
     fork_time = bluebird_fork_time_stamp
-    fork_time = genesis_timestamp if fork_time.zero?
-    
     delta = fork_time - genesis_timestamp
     raise ArgumentError, "Bluebird fork timestamp (#{fork_time}) must be greater than genesis timestamp (#{genesis_timestamp})" if delta.negative?
 
@@ -45,6 +43,7 @@ module SysConfig
 
     block_num = delta / L2_BLOCK_TIME
 
+    # 10 000-multiple guard applies only to the "scheduled" path
     unless block_num.multiple_of?(10_000) || allow_unsafe_bluebird_fork_block_number?
       raise ArgumentError, "Bluebird fork block number (#{block_num}) must be a multiple of 10,000"
     end
@@ -58,7 +57,13 @@ module SysConfig
   
   def bluebird_fork_time_stamp
     if ENV['BLUEBIRD_TIMESTAMP'].present?
-      Integer(ENV['BLUEBIRD_TIMESTAMP'])
+      ts = Integer(ENV['BLUEBIRD_TIMESTAMP'])
+      
+      if ts == 0
+        SysConfig.timestamp_from_block_number(2)
+      else
+        ts
+      end
     elsif ENV['BLUEBIRD_L2_BLOCK'].present?
       SysConfig.timestamp_from_block_number(ENV['BLUEBIRD_L2_BLOCK'])
     else
@@ -66,8 +71,12 @@ module SysConfig
     end
   end
   
+  def bluebird_immediate_fork?
+    bluebird_fork_time_stamp == SysConfig.timestamp_from_block_number(2)
+  end
+  
   def allow_unsafe_bluebird_fork_block_number?
-    ENV['ALLOW_UNSAFE_BLUEBIRD_FORK_BLOCK_NUMBER'] == 'true'
+    bluebird_immediate_fork? || ENV['ALLOW_UNSAFE_BLUEBIRD_FORK_BLOCK_NUMBER'] == 'true'
   end
   
   def is_bluebird_fork_block?(block)
