@@ -16,7 +16,7 @@ module FacetTransactionHelper
         input: ByteString.from_hex(tx_params[:input]),
         chain_id: 1,
         from_address: Address20.from_hex(tx_params[:from_address] || "0x" + "2" * 40),
-        to_address: FacetTransaction::FACET_INBOX_ADDRESS,
+        to_address: EthTransaction::FACET_INBOX_ADDRESS,
         status: 1,
         logs: tx_params[:events] || []
       )
@@ -134,7 +134,7 @@ module FacetTransactionHelper
     prev_l1_attributes = GethDriver.client.get_l1_attributes(facet_block.number - 1)
     prev_rate = prev_l1_attributes[:fct_mint_rate]
     
-    new_rate = FctMintCalculator.compute_new_rate(facet_block, prev_rate, prev_l1_attributes[:fct_mint_period_l1_data_gas])
+    new_rate = FctMintCalculatorOld.compute_new_rate(facet_block, prev_rate, prev_l1_attributes[:fct_mint_period_l1_data_gas])
     
     calldata_mint_amount(hex_string) * new_rate
   end

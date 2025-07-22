@@ -6,7 +6,7 @@ RSpec.describe EthBlockImporter do
   let(:facet_payload) do
     generate_facet_tx_payload(
       input: "0x1234",
-      to: "0x" + "1" * 40,
+      to: "0x1111111111111111111111111111111111111111",
       gas_limit: 1_000_000
     )
   end

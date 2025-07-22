@@ -1,87 +1,177 @@
 module FctMintCalculator
+  # TODO: Add Sorbet type checking.
+  
   extend SysConfig
   include SysConfig
   extend self
   
-  ADJUSTMENT_PERIOD = 10_000 # blocks
-  SECONDS_PER_YEAR = 31_556_952 # length of a gregorian year (365.2425 days)
-  HALVING_PERIOD_IN_SECONDS = 1 * SECONDS_PER_YEAR
+  ORIGINAL_ADJUSTMENT_PERIOD_TARGET_LENGTH = Rational(10_000)
+  ADJUSTMENT_PERIOD_TARGET_LENGTH = Rational(1_000)
+  MAX_MINT_RATE = Rational(((2 ** 128) - 1))
+  MIN_MINT_RATE = Rational(1)
+  MAX_RATE_ADJUSTMENT_UP_FACTOR = Rational(2)
+  MAX_RATE_ADJUSTMENT_DOWN_FACTOR = Rational(1, 2)
+  TARGET_ISSUANCE_FRACTION_FIRST_HALVING = Rational(1, 2)
+
+  TARGET_NUM_BLOCKS_IN_HALVING = 2_628_000.to_r
+  TARGET_NUM_PERIODS_IN_HALVING = Rational(TARGET_NUM_BLOCKS_IN_HALVING, ADJUSTMENT_PERIOD_TARGET_LENGTH)
   
-  RAW_HALVING_PERIOD_IN_BLOCKS = HALVING_PERIOD_IN_SECONDS / SysConfig::L2_BLOCK_TIME
-  ADJUSTMENT_PERIODS_PER_HALVING = RAW_HALVING_PERIOD_IN_BLOCKS / ADJUSTMENT_PERIOD
-  
-  HALVING_PERIOD_IN_BLOCKS = ADJUSTMENT_PERIOD * ADJUSTMENT_PERIODS_PER_HALVING
-  
-  TARGET_FCT_MINT_PER_L1_BLOCK = 40.ether
-  TARGET_MINT_PER_PERIOD = TARGET_FCT_MINT_PER_L1_BLOCK * ADJUSTMENT_PERIOD
-  MAX_ADJUSTMENT_FACTOR = 2
-  INITIAL_RATE = 800_000.gwei
-  MAX_RATE = 10_000_000.gwei
-  MIN_RATE = 1
-  
-  def halving_periods_passed(current_l2_block)
-    current_l2_block.number / HALVING_PERIOD_IN_BLOCKS
-  end
-  
-  def halving_factor(l2_block)
-    2 ** halving_periods_passed(l2_block)
-  end
-  
-  def is_first_block_in_period?(l2_block)
-    l2_block.number % ADJUSTMENT_PERIOD == 0
-  end
-  
-  def halving_adjusted_target(l2_block)
-    TARGET_MINT_PER_PERIOD / halving_factor(l2_block)
+  def client
+    @_client ||= GethDriver.client
   end
 
-  def compute_new_rate(facet_block, prev_rate, cumulative_l1_data_gas)
-    if is_first_block_in_period?(facet_block)
-      if cumulative_l1_data_gas == 0
-        new_rate = MAX_RATE
-      else
-        halving_adjusted_target = halving_adjusted_target(facet_block)
-        return 0 if halving_adjusted_target == 0
-        
-        new_rate = halving_adjusted_target / cumulative_l1_data_gas
-      end
+  # We calculate these once every time the node starts. It's a fine trade-off
+  def fork_parameters
+    @fork_parameters ||= compute_bluebird_fork_block_params(SysConfig.bluebird_fork_block_number)
+  end
 
-      max_allowed_rate = [prev_rate * MAX_ADJUSTMENT_FACTOR, MAX_RATE].min
-      min_allowed_rate = [prev_rate / MAX_ADJUSTMENT_FACTOR, MIN_RATE].max
+  def bluebird_fork_block_total_minted
+    fork_parameters[0]
+  end
+
+  def max_supply
+    fork_parameters[1]
+  end
+
+  def target_per_period
+    fork_parameters[2]
+  end
+  
+  def calculate_historical_total(block_number)
+    # Only used for the fork block calculation. The fork block will be the first block in a new period.
+    # Iterate through all completed periods before the fork block
+    total = 0
+    
+    # Start with the last block of the first period
+    # Use the original period length (10,000) because we're looking at historical data
+    current_period_end = ORIGINAL_ADJUSTMENT_PERIOD_TARGET_LENGTH - 1
+    
+    # Process all completed periods
+    while current_period_end < block_number
+      attributes = client.get_l1_attributes(current_period_end.to_i)
       
-      new_rate = max_allowed_rate if new_rate > max_allowed_rate
-      new_rate = min_allowed_rate if new_rate < min_allowed_rate
-    else
-      new_rate = prev_rate
+      if attributes && attributes[:fct_mint_period_l1_data_gas]
+        total += attributes[:fct_mint_period_l1_data_gas] * attributes[:fct_mint_rate]
+      end
+      
+      current_period_end += ORIGINAL_ADJUSTMENT_PERIOD_TARGET_LENGTH
     end
-
-    new_rate
+    
+    # Add minting from the partial period if needed
+    last_full_period_end = current_period_end - ORIGINAL_ADJUSTMENT_PERIOD_TARGET_LENGTH
+    if last_full_period_end < block_number - 1
+      attributes = client.get_l1_attributes(block_number - 1)
+      
+      if attributes && attributes[:fct_mint_period_l1_data_gas]
+        total += attributes[:fct_mint_period_l1_data_gas] * attributes[:fct_mint_rate]
+      end
+    end
+    
+    total
   end
 
+  def compute_bluebird_fork_block_params(block_number)
+    # Immediate-fork path (timestamp 0 → block 2)
+    if SysConfig.bluebird_immediate_fork?
+      total_minted   = 0                       # nothing minted pre-fork
+      max_supply     = Integer(ENV.fetch('BLUEBIRD_IMMEDIATE_FORK_MAX_SUPPLY_ETHER')).ether
+      initial_target = (max_supply / 2) / TARGET_NUM_PERIODS_IN_HALVING
+      return [total_minted, max_supply.to_i, initial_target.to_i]
+    end
+
+    # Scheduled-fork path (≥ 10 000 and < first halving)
+    # Get actual total minted FCT up to fork
+    total_minted = calculate_historical_total(block_number)
+    
+    # Calculate what percentage through the first halving period we are
+    percent_time_elapsed = Rational(block_number) / TARGET_NUM_BLOCKS_IN_HALVING
+    
+    # The expected percentage of total supply that should be minted by now
+    # (50% of supply should be minted in first halving, so we take 50% * percent_elapsed)
+    expected_mint_percentage = percent_time_elapsed * TARGET_ISSUANCE_FRACTION_FIRST_HALVING
+    
+    if expected_mint_percentage.zero?
+      raise "Bluebird fork pre-condition failed: expected mint percentage is zero"
+    end
+    
+    # Calculate new max supply based on actual minting rate
+    # If we've minted X tokens and that should be Y% of supply, then max supply = X/Y
+    new_max_supply = (total_minted / expected_mint_percentage)
+    
+    # Calculate new initial target per period by targeting 50% issuance in first year.
+    target_supply_in_first_halving = Rational(new_max_supply, 2)
+    new_initial_target_per_period = (target_supply_in_first_halving / TARGET_NUM_PERIODS_IN_HALVING)
+    
+    # Convert to integers only for final storage
+    [total_minted.to_i, new_max_supply.to_i, new_initial_target_per_period.to_i]
+  end
+
+  # --- Core Logic ---
   def assign_mint_amounts(facet_txs, facet_block)
-    prev_l1_attributes = GethDriver.client.get_l1_attributes(facet_block.number - 1)
-    prev_rate = prev_l1_attributes[:fct_mint_rate] 
-    cumulative_l1_data_gas = prev_l1_attributes[:fct_mint_period_l1_data_gas]
-    
-    new_rate = compute_new_rate(facet_block, prev_rate, cumulative_l1_data_gas)
-    
-    facet_txs.each do |tx|
-      tx.mint = tx.l1_data_gas_used * new_rate
+    # Use legacy mint calculator before the Bluebird fork block
+    if facet_block.number < SysConfig.bluebird_fork_block_number
+      return FctMintCalculatorOld.assign_mint_amounts(facet_txs, facet_block)
     end
+
+    current_block_num = facet_block.number
     
-    batch_l1_data_gas = facet_txs.sum(&:l1_data_gas_used)
-    
-    if is_first_block_in_period?(facet_block)
-      new_cumulative_l1_data_gas = batch_l1_data_gas
+    # Retrieve state from previous block (N-1)
+    prev_attrs = client.get_l1_attributes(current_block_num - 1)
+    current_l1_base_fee = facet_block.eth_block_base_fee_per_gas
+
+    if current_block_num == SysConfig.bluebird_fork_block_number
+      total_minted = bluebird_fork_block_total_minted
+      period_start_block = current_block_num
+      period_minted = 0
+      
+      fct_mint_rate = Rational(
+        prev_attrs.fetch(:fct_mint_rate),
+        prev_attrs.fetch(:base_fee) # NOTE: Base fee is never zero.
+      )
     else
-      new_cumulative_l1_data_gas = cumulative_l1_data_gas + batch_l1_data_gas
+      total_minted = prev_attrs.fetch(:fct_total_minted)
+      period_start_block = prev_attrs.fetch(:fct_period_start_block)
+      period_minted = prev_attrs.fetch(:fct_period_minted)
+      fct_mint_rate = prev_attrs.fetch(:fct_mint_rate)
     end
     
-    facet_block.assign_attributes(
-      fct_mint_rate: new_rate,
-      fct_mint_period_l1_data_gas: new_cumulative_l1_data_gas
+    engine = MintPeriod.new(
+      block_num: current_block_num,
+      fct_mint_rate: fct_mint_rate,
+      total_minted: total_minted,
+      period_minted: period_minted,
+      period_start_block: period_start_block
     )
-    
-    nil
+
+    engine.assign_mint_amounts(facet_txs, current_l1_base_fee)
+
+    facet_block.assign_attributes(
+      fct_total_minted:      engine.total_minted.to_i,
+      fct_mint_rate:         engine.fct_mint_rate.to_i,
+      fct_period_start_block: engine.period_start_block,
+      fct_period_minted:     engine.period_minted.to_i
+    )
+
+    engine
+  end
+
+  def issuance_on_pace_delta(block_number)
+    attrs = client.get_l1_attributes(block_number)
+
+    actual_total = if attrs && attrs[:fct_total_minted]
+      attrs[:fct_total_minted].to_r
+    else
+      # Fallback for legacy blocks where total minted wasn't tracked per block
+      calculate_historical_total(block_number)
+    end
+
+    supply_target_first_halving = max_supply.to_r / 2
+    actual_fraction = Rational(actual_total, supply_target_first_halving)
+
+    time_fraction = Rational(block_number) / TARGET_NUM_BLOCKS_IN_HALVING
+    raise "Time fraction is zero" if time_fraction.zero?
+
+    ratio = actual_fraction / time_fraction
+    (ratio - 1).to_f.round(5)
   end
 end
