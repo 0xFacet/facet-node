@@ -1,0 +1,141 @@
+<html><head><style>.diff{overflow:auto;}
+.diff ul{background:#fff;overflow:auto;font-size:13px;list-style:none;margin:0;padding:0;display:table;width:100%;}
+.diff del, .diff ins{display:block;text-decoration:none;}
+.diff li{padding:0; display:table-row;margin: 0;height:1em;}
+.diff li.ins{background:#dfd; color:#080}
+.diff li.del{background:#fee; color:#b00}
+.diff li:hover{background:#ffc}
+/* try 'whitespace:pre;' if you don't want lines to wrap */
+.diff del, .diff ins, .diff span{white-space:pre-wrap;font-family:courier;}
+.diff del strong{font-weight:normal;background:#fcc;}
+.diff ins strong{font-weight:normal;background:#9f9;}
+.diff li.diff-comment { display: none; }
+.diff li.diff-block-info { background: none repeat scroll 0 0 gray; }
+</style></head><body><div class="diff">
+  <ul>
+    <li class="unchanged"><span>    emit(:Transfer, from: from, to: address(0), amount: amount)</span></li>
+    <li class="unchanged"><span>  }</span></li>
+    <li class="unchanged"><span>}</span></li>
+    <li class="ins"><ins>contract(:Ownable, abstract: true) {</ins></li>
+    <li class="ins"><ins>  address(:public, :owner)</ins></li>
+    <li class="ins"><ins>  event(:OwnershipTransferred, { previousOwner: :address, newOwner: :address })</ins></li>
+    <li class="ins"><ins>  constructor(owner: :address) {</ins></li>
+    <li class="ins"><ins>    s.owner=owner</ins></li>
+    <li class="ins"><ins>  }</ins></li>
+    <li class="ins"><ins>  function(:transferOwnership, { newOwner: :address }, :public) {</ins></li>
+    <li class="ins"><ins>    onlyOwner!</ins></li>
+    <li class="ins"><ins>    previousOwner = s.owner</ins></li>
+    <li class="ins"><ins>    s.owner=newOwner</ins></li>
+    <li class="ins"><ins>    emit(:OwnershipTransferred, previousOwner: previousOwner, newOwner: newOwner)</ins></li>
+    <li class="ins"><ins>  }</ins></li>
+    <li class="ins"><ins>  function(:onlyOwner!, :internal) {</ins></li>
+    <li class="ins"><ins>    require(msg.sender == s.owner, &quot;msg.sender is not the owner&quot;)</ins></li>
+    <li class="ins"><ins>  }</ins></li>
+    <li class="ins"><ins>}</ins></li>
+    <li class="ins"><ins>contract(:Pausable, abstract: true) {</ins></li>
+    <li class="ins"><ins>  bool(:public, :paused)</ins></li>
+    <li class="ins"><ins>  event(:Paused, { account: :address })</ins></li>
+    <li class="ins"><ins>  event(:Unpaused, { account: :address })</ins></li>
+    <li class="ins"><ins>  constructor(initialPauseState: :bool) {</ins></li>
+    <li class="ins"><ins>    s.paused=initialPauseState</ins></li>
+    <li class="ins"><ins>  }</ins></li>
+    <li class="ins"><ins>  function(:_pause, :internal) {</ins></li>
+    <li class="ins"><ins>    s.paused=true</ins></li>
+    <li class="ins"><ins>    emit(:Paused, account: msg.sender)</ins></li>
+    <li class="ins"><ins>  }</ins></li>
+    <li class="ins"><ins>  function(:_unpause, :internal) {</ins></li>
+    <li class="ins"><ins>    s.paused=false</ins></li>
+    <li class="ins"><ins>    emit(:Unpaused, account: msg.sender)</ins></li>
+    <li class="ins"><ins>  }</ins></li>
+    <li class="ins"><ins>  function(:whenPaused!, :internal) {</ins></li>
+    <li class="ins"><ins>    require(s.paused, &quot;Contract is not paused&quot;)</ins></li>
+    <li class="ins"><ins>  }</ins></li>
+    <li class="ins"><ins>  function(:whenNotPaused!, :internal) {</ins></li>
+    <li class="ins"><ins>    require(!s.paused, &quot;Contract is paused&quot;)</ins></li>
+    <li class="ins"><ins>  }</ins></li>
+    <li class="ins"><ins>}</ins></li>
+    <li class="unchanged"><span>contract(:Upgradeable, abstract: true) {</span></li>
+    <li class="unchanged"><span>  address(:public, :upgradeAdmin)</span></li>
+    <li class="unchanged"><span>  event(:ContractUpgraded, { oldHash: :bytes32, newHash: :bytes32 })</span></li>
+    <li class="unchanged"><span>    emit(:ContractUpgraded, oldHash: currentHash, newHash: newHash)</span></li>
+    <li class="unchanged"><span>  }</span></li>
+    <li class="unchanged"><span>}</span></li>
+    <li class="del"><del>contract(:EthscriptionERC20Bridge<strong>V2</strong>, is: [:ERC20, :Upgradeable], upgradeable: true) {</del></li>
+    <li class="ins"><ins>contract(:EthscriptionERC20Bridge<strong>03</strong>, is: [:ERC20, :<strong>Ownable, :</strong>Upgradeable<strong>, :Pausable</strong>], upgradeable: true) {</ins></li>
+    <li class="unchanged"><span>  event(:BridgedIn, { to: :address, amount: :uint256 })</span></li>
+    <li class="unchanged"><span>  event(:InitiateWithdrawal, { from: :address, amount: :uint256, withdrawalId: :bytes32 })</span></li>
+    <li class="unchanged"><span>  event(:WithdrawalComplete, { to: :address, amount: :uint256, withdrawalId: :bytes32 })</span></li>
+    <li class="ins"><ins>  uint256(:public, :bridgeLimit)</ins></li>
+    <li class="unchanged"><span>  uint256(:public, :mintAmount)</span></li>
+    <li class="unchanged"><span>  address(:public, :trustedSmartContract)</span></li>
+    <li class="del"><del>  mapping(({ address: :uint256 }), :public, :bridgedInAmount)</del></li>
+    <li class="unchanged"><span>  mapping(({ bytes32: :uint256 }), :public, :withdrawalIdAmount)</span></li>
+    <li class="unchanged"><span>  mapping(({ address: :bytes32 }), :public, :userWithdrawalId)</span></li>
+    <li class="del"><del>  constructor(name: :string, symbol: :string, mintAmount: :uint256, trustedSmartContract: :address) {</del></li>
+    <li class="ins"><ins>  constructor(name: :string, symbol: :string, mintAmount: :uint256, trustedSmartContract: :address<strong>, bridgeLimit: :uint256, initialPauseState: :bool</strong>) {</ins></li>
+    <li class="unchanged"><span>    require(mintAmount &gt; 0, &quot;Invalid mint amount&quot;)</span></li>
+    <li class="unchanged"><span>    require(trustedSmartContract != address(0), &quot;Invalid smart contract&quot;)</span></li>
+    <li class="unchanged"><span>    self.ERC20.constructor(name: name, symbol: symbol, decimals: 18)</span></li>
+    <li class="unchanged"><span>    self.Upgradeable.constructor(upgradeAdmin: msg.sender)</span></li>
+    <li class="ins"><ins>    self.Ownable.constructor(owner: msg.sender)</ins></li>
+    <li class="ins"><ins>    self.Pausable.constructor(initialPauseState: initialPauseState)</ins></li>
+    <li class="unchanged"><span>    s.mintAmount=mintAmount</span></li>
+    <li class="unchanged"><span>    s.trustedSmartContract=trustedSmartContract</span></li>
+    <li class="ins"><ins>    s.bridgeLimit=bridgeLimit</ins></li>
+    <li class="unchanged"><span>  }</span></li>
+    <li class="del"><del>  function(:onUpgrade, { newTrustedSmartContract: :address }, :public) {</del></li>
+    <li class="del"><del>    require(msg.sender == address(this), &quot;Only the contract itself can migrate&quot;)</del></li>
+    <li class="del"><del>    s.trustedSmartContract=newTrustedSmartContract</del></li>
+    <li class="del"><del>    return nil</del></li>
+    <li class="del"><del>  }</del></li>
+    <li class="unchanged"><span>  function(:bridgeIn, { to: :address, amount: :uint256 }, :public) {</span></li>
+    <li class="unchanged"><span>    require(msg.sender == s.trustedSmartContract, &quot;Only the trusted smart contract can bridge in tokens&quot;)</span></li>
+    <li class="del"><del>    s.bridgedInAmount[to] += amount</del></li>
+    <li class="unchanged"><span>    _mint(to: to, amount: amount * s.mintAmount * 1.ether)</span></li>
+    <li class="unchanged"><span>    emit(:BridgedIn, to: to, amount: amount)</span></li>
+    <li class="unchanged"><span>  }</span></li>
+    <li class="unchanged"><span>  function(:bridgeOut, { amount: :uint256 }, :public) {</span></li>
+    <li class="ins"><ins>    whenNotPaused!</ins></li>
+    <li class="unchanged"><span>    withdrawalId = tx.current_transaction_hash</span></li>
+    <li class="unchanged"><span>    require(s.userWithdrawalId[msg.sender] == bytes32(0), &quot;Withdrawal pending&quot;)</span></li>
+    <li class="unchanged"><span>    require(s.withdrawalIdAmount[withdrawalId] == 0, &quot;Already bridged out&quot;)</span></li>
+    <li class="del"><del>    require(s.bridgedInAmount[msg.sender] &gt;= amount, &quot;Not enough bridged in&quot;)</del></li>
+    <li class="unchanged"><span>    require(amount &gt; 0, &quot;Invalid amount&quot;)</span></li>
+    <li class="ins"><ins>    require(s.bridgeLimit &gt; 0 &amp;&amp; amount &lt;= s.bridgeLimit, &quot;Amount is too large&quot;)</ins></li>
+    <li class="unchanged"><span>    s.userWithdrawalId[msg.sender] = withdrawalId</span></li>
+    <li class="unchanged"><span>    s.withdrawalIdAmount[withdrawalId] = amount</span></li>
+    <li class="del"><del>    s.bridgedInAmount[msg.sender] -= amount</del></li>
+    <li class="unchanged"><span>    _burn(from: msg.sender, amount: amount * s.mintAmount * 1.ether)</span></li>
+    <li class="unchanged"><span>    emit(:InitiateWithdrawal, from: msg.sender, amount: amount, withdrawalId: withdrawalId)</span></li>
+    <li class="unchanged"><span>  }</span></li>
+    <li class="unchanged"><span>    s.userWithdrawalId[to] = bytes32(0)</span></li>
+    <li class="unchanged"><span>    emit(:WithdrawalComplete, to: to, amount: amount, withdrawalId: withdrawalId)</span></li>
+    <li class="unchanged"><span>  }</span></li>
+    <li class="ins"><ins>  function(:onUpgrade, { owner: :address, bridgeLimit: :uint256 }, :public) {</ins></li>
+    <li class="ins"><ins>    require(msg.sender == address(this), &quot;Only the contract itself can upgrade&quot;)</ins></li>
+    <li class="ins"><ins>    s.owner=owner</ins></li>
+    <li class="ins"><ins>    s.bridgeLimit=bridgeLimit</ins></li>
+    <li class="ins"><ins>    return nil</ins></li>
+    <li class="ins"><ins>  }</ins></li>
+    <li class="ins"><ins>  function(:setBridgeLimit, { bridgeLimit: :uint256 }, :public) {</ins></li>
+    <li class="ins"><ins>    onlyOwner!</ins></li>
+    <li class="ins"><ins>    s.bridgeLimit=bridgeLimit</ins></li>
+    <li class="ins"><ins>    return nil</ins></li>
+    <li class="ins"><ins>  }</ins></li>
+    <li class="ins"><ins>  function(:updateTrustedSmartContract, { newTrustedSmartContract: :address }, :public) {</ins></li>
+    <li class="ins"><ins>    onlyOwner!</ins></li>
+    <li class="ins"><ins>    s.trustedSmartContract=newTrustedSmartContract</ins></li>
+    <li class="ins"><ins>    return nil</ins></li>
+    <li class="ins"><ins>  }</ins></li>
+    <li class="ins"><ins>  function(:pause, :public) {</ins></li>
+    <li class="ins"><ins>    onlyOwner!</ins></li>
+    <li class="ins"><ins>    _pause</ins></li>
+    <li class="ins"><ins>  }</ins></li>
+    <li class="ins"><ins>  function(:unpause, :public) {</ins></li>
+    <li class="ins"><ins>    onlyOwner!</ins></li>
+    <li class="ins"><ins>    _unpause</ins></li>
+    <li class="ins"><ins>  }</ins></li>
+    <li class="unchanged"><span>}</span></li>
+  </ul>
+</div>
+</body></html>

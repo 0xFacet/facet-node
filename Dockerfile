@@ -1,6 +1,6 @@
 # syntax = docker/dockerfile:1
 
-ARG RUBY_VERSION=3.4.4
+ARG RUBY_VERSION=3.3.4
 FROM registry.docker.com/library/ruby:$RUBY_VERSION-slim AS base
 
 WORKDIR /rails
@@ -23,9 +23,6 @@ RUN apt-get update -qq && \
     git \
     pkg-config \
     libsecp256k1-dev \
-    libssl-dev \
-    libyaml-dev \
-    zlib1g-dev \
     automake \
     autoconf \
     libtool && \
@@ -47,8 +44,7 @@ FROM base
 # Install only runtime dependencies
 RUN apt-get update -qq && \
     apt-get install --no-install-recommends -y \
-    libsecp256k1-dev \
-    libyaml-0-2 && \
+    libsecp256k1-dev && \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
 
 # Copy built artifacts
@@ -57,7 +53,7 @@ COPY --from=build /rails /rails
 
 # Set up non-root user
 RUN useradd rails --create-home --shell /bin/bash && \
-    chown -R rails:rails log tmp
+    chown -R rails:rails db log storage tmp
 USER rails:rails
 
 CMD ["bundle", "exec", "clockwork", "config/derive_facet_blocks.rb"]

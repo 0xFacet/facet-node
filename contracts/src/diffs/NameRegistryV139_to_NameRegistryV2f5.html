@@ -1,0 +1,171 @@
+<html><head><style>.diff{overflow:auto;}
+.diff ul{background:#fff;overflow:auto;font-size:13px;list-style:none;margin:0;padding:0;display:table;width:100%;}
+.diff del, .diff ins{display:block;text-decoration:none;}
+.diff li{padding:0; display:table-row;margin: 0;height:1em;}
+.diff li.ins{background:#dfd; color:#080}
+.diff li.del{background:#fee; color:#b00}
+.diff li:hover{background:#ffc}
+/* try 'whitespace:pre;' if you don't want lines to wrap */
+.diff del, .diff ins, .diff span{white-space:pre-wrap;font-family:courier;}
+.diff del strong{font-weight:normal;background:#fcc;}
+.diff ins strong{font-weight:normal;background:#9f9;}
+.diff li.diff-comment { display: none; }
+.diff li.diff-block-info { background: none repeat scroll 0 0 gray; }
+</style></head><body><div class="diff">
+  <ul>
+    <li class="unchanged"><span>    s.balanceOf[from] -= amount</span></li>
+    <li class="unchanged"><span>    s.totalSupply -= amount</span></li>
+    <li class="unchanged"><span>    emit(:Transfer, from: from, to: address(0), amount: amount)</span></li>
+    <li class="ins"><ins>  }</ins></li>
+    <li class="ins"><ins>}</ins></li>
+    <li class="ins"><ins>contract(:ERC2981, abstract: true) {</ins></li>
+    <li class="ins"><ins>  event(:DefaultRoyaltyUpdated, { receiver: :address, feeNumerator: :uint96 })</ins></li>
+    <li class="ins"><ins>  event(:TokenRoyaltyUpdated, { tokenId: :uint256, receiver: :address, feeNumerator: :uint96 })</ins></li>
+    <li class="ins"><ins>  mapping(({ uint256: :address }), :internal, :_tokenIdToReceiver)</ins></li>
+    <li class="ins"><ins>  mapping(({ uint256: :uint96 }), :internal, :_tokenIdToFeeNumerator)</ins></li>
+    <li class="ins"><ins>  address(:internal, :_defaultRoyaltyReceiver)</ins></li>
+    <li class="ins"><ins>  uint96(:internal, :_defaultFeeNumerator)</ins></li>
+    <li class="ins"><ins>  function(:royaltyInfo, { tokenId: :uint256, salePrice: :uint256 }, :public, :view, :virtual, returns: { receiver: :address, royaltyAmount: :uint256 }) {</ins></li>
+    <li class="ins"><ins>    receiver = s._tokenIdToReceiver[tokenId]</ins></li>
+    <li class="ins"><ins>    feeNumerator = s._tokenIdToFeeNumerator[tokenId]</ins></li>
+    <li class="ins"><ins>    if receiver == address(0)</ins></li>
+    <li class="ins"><ins>      receiver = s._defaultRoyaltyReceiver</ins></li>
+    <li class="ins"><ins>      feeNumerator = s._defaultFeeNumerator</ins></li>
+    <li class="ins"><ins>    end</ins></li>
+    <li class="ins"><ins>    royaltyAmount = (salePrice * feeNumerator).div(_feeDenominator)</ins></li>
+    <li class="ins"><ins>    return { receiver: receiver, royaltyAmount: royaltyAmount }</ins></li>
+    <li class="ins"><ins>  }</ins></li>
+    <li class="ins"><ins>  function(:_setDefaultRoyalty, { receiver: :address, feeNumerator: :uint96 }, :internal, :virtual) {</ins></li>
+    <li class="ins"><ins>    require(feeNumerator &lt;= _feeDenominator, &quot;ERC2981InvalidDefaultRoyalty&quot;)</ins></li>
+    <li class="ins"><ins>    require(receiver != address(0), &quot;ERC2981InvalidDefaultRoyaltyReceiver: address(0)&quot;)</ins></li>
+    <li class="ins"><ins>    s._defaultRoyaltyReceiver=receiver</ins></li>
+    <li class="ins"><ins>    s._defaultFeeNumerator=feeNumerator</ins></li>
+    <li class="ins"><ins>    emit(:DefaultRoyaltyUpdated, receiver: receiver, feeNumerator: feeNumerator)</ins></li>
+    <li class="ins"><ins>  }</ins></li>
+    <li class="ins"><ins>  function(:_deleteDefaultRoyalty, :internal, :virtual) {</ins></li>
+    <li class="ins"><ins>    s._defaultRoyaltyReceiver=address(0)</ins></li>
+    <li class="ins"><ins>    s._defaultFeeNumerator=0</ins></li>
+    <li class="ins"><ins>    emit(:DefaultRoyaltyUpdated, receiver: address(0), feeNumerator: 0)</ins></li>
+    <li class="ins"><ins>  }</ins></li>
+    <li class="ins"><ins>  function(:_setTokenRoyalty, { tokenId: :uint256, receiver: :address, feeNumerator: :uint96 }, :internal, :virtual) {</ins></li>
+    <li class="ins"><ins>    require(feeNumerator &lt;= _feeDenominator, &quot;ERC2981InvalidTokenRoyalty&quot;)</ins></li>
+    <li class="ins"><ins>    require(receiver != address(0), &quot;ERC2981InvalidTokenRoyaltyReceiver&quot;)</ins></li>
+    <li class="ins"><ins>    s._tokenIdToReceiver[tokenId] = receiver</ins></li>
+    <li class="ins"><ins>    s._tokenIdToFeeNumerator[tokenId] = feeNumerator</ins></li>
+    <li class="ins"><ins>    emit(:TokenRoyaltyUpdated, tokenId: tokenId, receiver: receiver, feeNumerator: feeNumerator)</ins></li>
+    <li class="ins"><ins>  }</ins></li>
+    <li class="ins"><ins>  function(:_deleteTokenRoyalty, { tokenId: :uint256 }, :internal, :virtual) {</ins></li>
+    <li class="ins"><ins>    s._tokenIdToReceiver[tokenId] = address(0)</ins></li>
+    <li class="ins"><ins>    s._tokenIdToFeeNumerator[tokenId] = 0</ins></li>
+    <li class="ins"><ins>    emit(:TokenRoyaltyUpdated, tokenId: tokenId, receiver: address(0), feeNumerator: 0)</ins></li>
+    <li class="ins"><ins>  }</ins></li>
+    <li class="ins"><ins>  function(:_feeDenominator, :internal, :view, :virtual, returns: :uint96) {</ins></li>
+    <li class="ins"><ins>    return 10000</ins></li>
+    <li class="ins"><ins>  }</ins></li>
+    <li class="ins"><ins>  function(:supportsERC2981, :public, :pure, :virtual, returns: :bool) {</ins></li>
+    <li class="ins"><ins>    return true</ins></li>
+    <li class="unchanged"><span>  }</span></li>
+    <li class="unchanged"><span>}</span></li>
+    <li class="unchanged"><span>contract(:ERC721, abstract: true) {</span></li>
+    <li class="unchanged"><span>  }</span></li>
+    <li class="unchanged"><span>  function(:approve, { spender: :address, id: :uint256 }, :public, :virtual) {</span></li>
+    <li class="unchanged"><span>    owner = ownerOf(id)</span></li>
+    <li class="del"><del>    require(msg.sender == owner || s.isApprovedForAll[owner][msg.sender], &quot;<strong>NOT_AUTHORIZED</strong>&quot;)</del></li>
+    <li class="ins"><ins>    require(msg.sender == owner || s.isApprovedForAll[owner][msg.sender], &quot;<strong>ERC721: msg.sender not authorized to approve</strong>&quot;)</ins></li>
+    <li class="unchanged"><span>    s.getApproved[id] = spender</span></li>
+    <li class="unchanged"><span>    emit(:Approval, owner: owner, spender: spender, id: id)</span></li>
+    <li class="unchanged"><span>  }</span></li>
+    <li class="unchanged"><span>  function(:transferFrom, { from: :address, to: :address, id: :uint256 }, :public, :virtual) {</span></li>
+    <li class="unchanged"><span>    require(from == ownerOf(id), &quot;ERC721: transfer of token that is not own&quot;)</span></li>
+    <li class="unchanged"><span>    require(to != address(0), &quot;ERC721: transfer to the zero address&quot;)</span></li>
+    <li class="del"><del>    require(<strong>_</strong>isApprovedOrOwner(spender: msg.sender, id: id), &quot;<strong>NOT_AUTHORIZED</strong>&quot;)</del></li>
+    <li class="ins"><ins>    require(isApprovedOrOwner(spender: msg.sender, id: id), &quot;<strong>ERC721: msg.sender not authorized to call transferFrom</strong>&quot;)</ins></li>
+    <li class="unchanged"><span>    s._balanceOf[from] -= 1</span></li>
+    <li class="unchanged"><span>    s._balanceOf[to] += 1</span></li>
+    <li class="unchanged"><span>    s._ownerOf[id] = to</span></li>
+    <li class="unchanged"><span>    s.getApproved[id] = address(0)</span></li>
+    <li class="del"><del>    <strong>return nil</strong></del></li>
+    <li class="ins"><ins>    <strong>emit(:Transfer, from: from, to: to, id: id)</strong></ins></li>
+    <li class="unchanged"><span>  }</span></li>
+    <li class="del"><del>  function(:<strong>_</strong>isApprovedOrOwner, { spender: :address, id: :uint256 }, :<strong>internal</strong>, :virtual, returns: :bool) {</del></li>
+    <li class="ins"><ins>  function(:isApprovedOrOwner, { spender: :address, id: :uint256 }, :<strong>public, :view</strong>, :virtual, returns: :bool) {</ins></li>
+    <li class="unchanged"><span>    owner = ownerOf(id)</span></li>
+    <li class="unchanged"><span>    spender == owner || s.getApproved[id] == spender || s.isApprovedForAll[owner][spender]</span></li>
+    <li class="unchanged"><span>  }</span></li>
+    <li class="del"><del>  function(:_exists, { id: :uint256 }, :internal, :virtual, returns: :bool) {</del></li>
+    <li class="ins"><ins>  function(:_exists, { id: :uint256 }, :internal, :vi<strong>ew, :vi</strong>rtual, returns: :bool) {</ins></li>
+    <li class="unchanged"><span>    return s._ownerOf[id] != address(0)</span></li>
+    <li class="unchanged"><span>  }</span></li>
+    <li class="unchanged"><span>  function(:_mint, { to: :address, id: :uint256 }, :internal, :virtual) {</span></li>
+    <li class="unchanged"><span>  function(:tokenURI, { id: :uint256 }, :public, :view, :virtual, returns: :string) {</span></li>
+    <li class="unchanged"><span>  }</span></li>
+    <li class="unchanged"><span>}</span></li>
+    <li class="del"><del>contract(:NameRegistryRenderer, abstract: true) {</del></li>
+    <li class="ins"><ins>contract(:NameRegistryRenderer<strong>01</strong>, abstract: true) {</ins></li>
+    <li class="unchanged"><span>  string(:public, :cardTemplate)</span></li>
+    <li class="unchanged"><span>  event(:StickerCreated, { stickerId: :uint256, name: :string, description: :string, imageURI: :string, stickerExpiry: :uint256, grantingAddress: :address })</span></li>
+    <li class="unchanged"><span>  event(:StickerClaimed, { stickerId: :uint256, claimer: :address })</span></li>
+    <li class="unchanged"><span>  function(:updateCardTemplate, { cardTemplate: :string }, :public) {</span></li>
+    <li class="unchanged"><span>    onlyOwner!</span></li>
+    <li class="unchanged"><span>    s.cardTemplate=cardTemplate</span></li>
+    <li class="ins"><ins>    return nil</ins></li>
+    <li class="unchanged"><span>  }</span></li>
+    <li class="unchanged"><span>  function(:_clearCardPersonalInfo, { tokenId: :uint256 }, :internal) {</span></li>
+    <li class="unchanged"><span>    _clearCardDetails(tokenId)</span></li>
+    <li class="unchanged"><span>    emit(:ContractUpgraded, oldHash: currentHash, newHash: newHash)</span></li>
+    <li class="unchanged"><span>  }</span></li>
+    <li class="unchanged"><span>}</span></li>
+    <li class="del"><del>contract(:NameRegistry, is: [:ERC721, :Upgradeable, :Ownable, :Pausable, :NameRegistryRenderer], upgradeable: true) {</del></li>
+    <li class="ins"><ins>contract(:NameRegistry<strong>01</strong>, is: [:ERC721, :<strong>ERC2981, :</strong>Upgradeable, :Ownable, :Pausable, :NameRegistryRenderer<strong>01</strong>], upgradeable: true) {</ins></li>
+    <li class="unchanged"><span>  event(:NameRegistered, { tokenId: :uint256, owner: :address, name: :string, expires: :uint256 })</span></li>
+    <li class="unchanged"><span>  event(:NameRenewed, { tokenId: :uint256, newExpiry: :uint256 })</span></li>
+    <li class="unchanged"><span>  event(:PrimaryNameSet, { user: :address, tokenId: :uint256 })</span></li>
+    <li class="unchanged"><span>    self.Upgradeable.constructor(upgradeAdmin: msg.sender)</span></li>
+    <li class="unchanged"><span>    self.Ownable.constructor(owner: owner)</span></li>
+    <li class="unchanged"><span>    self.Pausable.constructor(initialPauseState: true)</span></li>
+    <li class="del"><del>    self.NameRegistryRenderer.constructor(cardTemplate: cardTemplate)</del></li>
+    <li class="ins"><ins>    self.NameRegistryRenderer<strong>01</strong>.constructor(cardTemplate: cardTemplate)</ins></li>
+    <li class="unchanged"><span>    s.WETH=_WETH</span></li>
+    <li class="unchanged"><span>    s.usdWeiCentsInOneEth=usdWeiCentsInOneEth</span></li>
+    <li class="unchanged"><span>    s.charCountToUsdWeiCentsPrice=charCountToUsdWeiCentsPrice</span></li>
+    <li class="unchanged"><span>    }</span></li>
+    <li class="unchanged"><span>  }</span></li>
+    <li class="unchanged"><span>  function(:tokenURI, { id: :uint256 }, :public, :view, :override, returns: :string) {</span></li>
+    <li class="del"><del>    enforceNotExpired!(id)</del></li>
+    <li class="unchanged"><span>    require(_exists(id: id), &quot;ERC721Metadata: URI query for nonexistent token&quot;)</span></li>
+    <li class="ins"><ins>    enforceNotExpired!(id)</ins></li>
+    <li class="unchanged"><span>    name = s.tokenIdToName[id]</span></li>
+    <li class="del"><del>    card = self.NameRegistryRenderer.renderCard(id)</del></li>
+    <li class="ins"><ins>    card = self.NameRegistryRenderer<strong>01</strong>.renderCard(id)</ins></li>
+    <li class="unchanged"><span>    b64Card = &quot;data:text/html;charset=utf-8;base64,&quot; + card.base64Encode</span></li>
+    <li class="del"><del> <strong>   </strong>json_data = json.stringify(name: <strong>&quot;#{</strong>name<strong>} (##{id.toString})&quot;</strong>, description: <strong>s.cardBios[id]</strong>, animation_url: b64Card)</del></li>
+    <li class="ins"><ins><strong>    attributes = [{ display_type: &quot;number&quot;, trait_type: &quot;Length&quot;, value: name.length }, { display_type: &quot;date&quot;, trait_type: &quot;Expiration Date&quot;, value: s.tokenExpiryTimes[id] }, { display_type:</strong> <strong>&quot;date&quot;, trait_type: &quot;Registration Date&quot;, value: s.registrationTimestamps[id] }]</strong></ins></li>
+    <li class="ins"><ins><strong>    </strong>json_data = json.stringify(name: name, description: <strong>&quot;#{name}, a Facet Card name.&quot;</strong>, animation_url: b64Card<strong>, attributes: attributes</strong>)</ins></li>
+    <li class="unchanged"><span>    return &quot;data:application/json,#{json_data}&quot;</span></li>
+    <li class="unchanged"><span>  }</span></li>
+    <li class="unchanged"><span>  function(:_burn, { id: :uint256 }, :internal, :override) {</span></li>
+    <li class="unchanged"><span>    amount = ERC20(s.WETH).balanceOf(address(this))</span></li>
+    <li class="unchanged"><span>    ERC20(s.WETH).transfer(s.owner, amount)</span></li>
+    <li class="unchanged"><span>  }</span></li>
+    <li class="ins"><ins>  function(:setDefaultRoyalty, { receiver: :address, feeNumerator: :uint96 }, :public) {</ins></li>
+    <li class="ins"><ins>    onlyOwner!</ins></li>
+    <li class="ins"><ins>    _setDefaultRoyalty(receiver: receiver, feeNumerator: feeNumerator)</ins></li>
+    <li class="ins"><ins>  }</ins></li>
+    <li class="ins"><ins>  function(:deleteDefaultRoyalty, :public) {</ins></li>
+    <li class="ins"><ins>    onlyOwner!</ins></li>
+    <li class="ins"><ins>    _deleteDefaultRoyalty</ins></li>
+    <li class="ins"><ins>  }</ins></li>
+    <li class="ins"><ins>  function(:setTokenRoyalty, { tokenId: :uint256, receiver: :address, feeNumerator: :uint96 }, :public) {</ins></li>
+    <li class="ins"><ins>    onlyOwner!</ins></li>
+    <li class="ins"><ins>    _setTokenRoyalty(tokenId: tokenId, receiver: receiver, feeNumerator: feeNumerator)</ins></li>
+    <li class="ins"><ins>  }</ins></li>
+    <li class="ins"><ins>  function(:deleteTokenRoyalty, { tokenId: :uint256 }, :public) {</ins></li>
+    <li class="ins"><ins>    onlyOwner!</ins></li>
+    <li class="ins"><ins>    _deleteTokenRoyalty(tokenId)</ins></li>
+    <li class="ins"><ins>  }</ins></li>
+    <li class="unchanged"><span>  function(:totalSupply, :public, :view, returns: :uint256) {</span></li>
+    <li class="unchanged"><span>    nextTokenId - 1</span></li>
+    <li class="unchanged"><span>  }</span></li>
+  </ul>
+</div>
+</body></html>
