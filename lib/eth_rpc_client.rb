@@ -156,6 +156,13 @@ class EthRpcClient
       'Content-Type' => 'application/json'
     }
   end
+  
+  def get_code(address, block_number = "latest")
+    query_api(
+      method: 'eth_getCode',
+      params: [address, block_number]
+    )
+  end
 
   def get_storage_at(address, slot, block_number = "latest")
     query_api(

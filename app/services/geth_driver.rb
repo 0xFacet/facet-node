@@ -70,14 +70,15 @@ module GethDriver
     end
     
     # Add L1Block implementation deployment and upgrade at fork block
-    # TODO: Add solady factory deployment tx
     if new_facet_block.number == SysConfig.bluebird_fork_block_number - 1
-      # Get nonce at start of block for address calculation
-      deployment_nonce = EthRpcClient.l2.get_nonce(FacetTransaction::SYSTEM_ADDRESS.to_hex)
+      # Get the nonce at the beginning of the block
+      start_nonce = EthRpcClient.l2.get_nonce(FacetTransaction::SYSTEM_ADDRESS.to_hex)
 
-      # First tx is attributes, second is deployment, so deployment uses nonce + 1
+      # system_txs already contains all txs that will be executed *before* deployment
+      deployment_nonce = start_nonce + system_txs.size
+
       system_txs << FacetTransaction.l1_block_implementation_deployment_tx(new_facet_block)
-      system_txs << FacetTransaction.l1_block_proxy_upgrade_tx(new_facet_block, deployment_nonce + 1)
+      system_txs << FacetTransaction.l1_block_proxy_upgrade_tx(new_facet_block, deployment_nonce)
     end
     
     if new_facet_block.number == SysConfig.bluebird_fork_block_number
