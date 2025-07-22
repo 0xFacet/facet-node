@@ -1,5 +1,7 @@
 class FacetTransaction
   module Special
+    L1_BLOCK_BLUEBIRD_COMPILED_FILENAME = 'l1_block_bluebird_compiled.json'
+
     # Builds the L1 attributes system transaction for the supplied FacetBlock.
     def l1_attributes_tx_from_blocks(facet_block)
       calldata = L1AttributesTxCalldata.build(facet_block)
@@ -58,8 +60,12 @@ class FacetTransaction
 
     # Builds a deployment transaction for the new L1Block implementation used at the Bluebird fork.
     def l1_block_implementation_deployment_tx(block)
-      filename = Rails.root.join('contracts/src/upgrades/L1Block.sol')
-      compiled = SolidityCompiler.compile(filename)
+      # Load pre-generated compiled output from file
+      compiled_path = Rails.root.join('config', L1_BLOCK_BLUEBIRD_COMPILED_FILENAME)
+      unless File.exist?(compiled_path)
+        raise "L1Block compiled file not found at #{compiled_path}. Run 'rake l1_block:generate_bytecode' to generate it."
+      end
+      compiled = JSON.parse(File.read(compiled_path))
       bytecode = compiled['L1Block']['bytecode']
 
       upgrade_intent = 'deploy new L1Block implementation for Bluebird upgrade'
