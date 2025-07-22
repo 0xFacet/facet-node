@@ -59,12 +59,9 @@ gem "httparty", "~> 0.22.0"
 
 gem "jwt", "~> 2.8"
 
-gem "activerecord-import", "~> 1.7"
-
 gem "clockwork", "~> 3.0"
 
 gem "airbrake", "~> 13.0"
-gem "dalli", "~> 3.2"
 gem "clipboard", "~> 2.0", :group => [:development, :test]
 gem "order_query", "~> 0.5.3"
 

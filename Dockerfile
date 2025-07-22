@@ -53,7 +53,7 @@ COPY --from=build /rails /rails
 
 # Set up non-root user
 RUN useradd rails --create-home --shell /bin/bash && \
-    chown -R rails:rails db log storage tmp
+    chown -R rails:rails log tmp
 USER rails:rails
 
 CMD ["bundle", "exec", "clockwork", "config/derive_facet_blocks.rb"]
