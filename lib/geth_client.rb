@@ -37,7 +37,7 @@ class GethClient
         base_fee: eth_block.base_fee_per_gas,
         blob_base_fee: 1,
         hash: eth_block.block_hash,
-        batcher_hash: Hash32.from_bin("\x00".b * 32).to_hex,
+        batcher_hash: Hash32.from_bin("\x00".b * 32),
         sequence_number: 0,
         base_fee_scalar: 0,
         blob_base_fee_scalar: 1,
