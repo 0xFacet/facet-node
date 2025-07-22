@@ -1,0 +1,145 @@
+<html><head><style>.diff{overflow:auto;}
+.diff ul{background:#fff;overflow:auto;font-size:13px;list-style:none;margin:0;padding:0;display:table;width:100%;}
+.diff del, .diff ins{display:block;text-decoration:none;}
+.diff li{padding:0; display:table-row;margin: 0;height:1em;}
+.diff li.ins{background:#dfd; color:#080}
+.diff li.del{background:#fee; color:#b00}
+.diff li:hover{background:#ffc}
+/* try 'whitespace:pre;' if you don't want lines to wrap */
+.diff del, .diff ins, .diff span{white-space:pre-wrap;font-family:courier;}
+.diff del strong{font-weight:normal;background:#fcc;}
+.diff ins strong{font-weight:normal;background:#9f9;}
+.diff li.diff-comment { display: none; }
+.diff li.diff-block-info { background: none repeat scroll 0 0 gray; }
+</style></head><body><div class="diff">
+  <ul>
+    <li class="unchanged"><span>    emit(:Transfer, from: from, to: address(0), amount: amount)</span></li>
+    <li class="unchanged"><span>  }</span></li>
+    <li class="unchanged"><span>}</span></li>
+    <li class="ins"><ins>contract(:Ownable, abstract: true) {</ins></li>
+    <li class="ins"><ins>  address(:public, :owner)</ins></li>
+    <li class="ins"><ins>  event(:OwnershipTransferred, { previousOwner: :address, newOwner: :address })</ins></li>
+    <li class="ins"><ins>  constructor(owner: :address) {</ins></li>
+    <li class="ins"><ins>    s.owner=owner</ins></li>
+    <li class="ins"><ins>  }</ins></li>
+    <li class="ins"><ins>  function(:transferOwnership, { newOwner: :address }, :public) {</ins></li>
+    <li class="ins"><ins>    onlyOwner!</ins></li>
+    <li class="ins"><ins>    previousOwner = s.owner</ins></li>
+    <li class="ins"><ins>    s.owner=newOwner</ins></li>
+    <li class="ins"><ins>    emit(:OwnershipTransferred, previousOwner: previousOwner, newOwner: newOwner)</ins></li>
+    <li class="ins"><ins>  }</ins></li>
+    <li class="ins"><ins>  function(:onlyOwner!, :internal) {</ins></li>
+    <li class="ins"><ins>    require(msg.sender == s.owner, &quot;msg.sender is not the owner&quot;)</ins></li>
+    <li class="ins"><ins>  }</ins></li>
+    <li class="ins"><ins>}</ins></li>
+    <li class="unchanged"><span>contract(:Upgradeable, abstract: true) {</span></li>
+    <li class="unchanged"><span>  address(:public, :upgradeAdmin)</span></li>
+    <li class="unchanged"><span>  event(:ContractUpgraded, { oldHash: :bytes32, newHash: :bytes32 })</span></li>
+    <li class="unchanged"><span>    emit(:ContractUpgraded, oldHash: currentHash, newHash: newHash)</span></li>
+    <li class="unchanged"><span>  }</span></li>
+    <li class="unchanged"><span>}</span></li>
+    <li class="del"><del>contract(:<strong>EtherBridge, is: [:ERC20, :Upgrade</strong>able], upgradeable: true) {</del></li>
+    <li class="ins"><ins>contract(:<strong>BridgeAndCallHelper, is: [:Upgradeable, :Ownable], upgradeable: true) {</strong></ins></li>
+    <li class="ins"><ins><strong>  event(:CallFromBridge, { bridgingUser: :address, addressToCall: :address, calldata: :string, initialAmount: :uint256, finalAmount: :uint256, feeAmount: :uint256, resultStatus: :bool, resultData: :string })</strong></ins></li>
+    <li class="ins"><ins><strong>  event(:BridgeUpdated, { newBridge: :address })</strong></ins></li>
+    <li class="ins"><ins><strong>  event(:FeeUpdated, { newFee: :uint256 })</strong></ins></li>
+    <li class="ins"><ins><strong>  address(:public, :bridge)</strong></ins></li>
+    <li class="ins"><ins><strong>  uint256(:public, :fee)</strong></ins></li>
+    <li class="ins"><ins><strong>  bool(:locked)</strong></ins></li>
+    <li class="ins"><ins><strong>  constructor(bridge: :address, fee: :uint256, owner: :address) {</strong></ins></li>
+    <li class="ins"><ins><strong>    self.Ownable.constructor(owner: owner)</strong></ins></li>
+    <li class="ins"><ins><strong>    self.Upgradeable.constructor(upgradeAdmin: owner)</strong></ins></li>
+    <li class="ins"><ins><strong>    s.bridge=bridge</strong></ins></li>
+    <li class="ins"><ins><strong>    s.fee=fee</strong></ins></li>
+    <li class="ins"><ins><strong>  }</strong></ins></li>
+    <li class="ins"><ins><strong>  function(:setBridge, { newBridge: :address }, :public) {</strong></ins></li>
+    <li class="ins"><ins><strong>    onlyOwner!</strong></ins></li>
+    <li class="ins"><ins><strong>    s.bridge=newBridge</strong></ins></li>
+    <li class="ins"><ins><strong>    emit(:BridgeUpdated, newBridge: newBridge)</strong></ins></li>
+    <li class="ins"><ins><strong>  }</strong></ins></li>
+    <li class="ins"><ins><strong>  function(:setFee, { newFee: :uint256 }, :public) {</strong></ins></li>
+    <li class="ins"><ins><strong>    onlyOwner!</strong></ins></li>
+    <li class="ins"><ins><strong>    s.fee=newFee</strong></ins></li>
+    <li class="ins"><ins><strong>    emit(:FeeUpdated, newFee: newFee)</strong></ins></li>
+    <li class="ins"><ins><strong>  }</strong></ins></li>
+    <li class="ins"><ins><strong>  function(:callFromBridge, { bridgingUser: :address, addressToCall: :address, base64Calldata: :string }, :public) {</strong></ins></li>
+    <li class="ins"><ins><strong>    require(msg.sender == s.bridge, &quot;Only the bridge can callFromBridge&quot;)</strong></ins></li>
+    <li class="ins"><ins><strong>    require(addressToCall != address(this), &quot;Cannot call self&quot;)</strong></ins></li>
+    <li class="ins"><ins><strong>    require(!s.locked, &quot;No reentrancy allowed&quot;)</strong></ins></li>
+    <li class="ins"><ins><strong>    s.locked=true</strong></ins></li>
+    <li class="ins"><ins><strong>    calldata = base64Calldata.base64Decode</strong></ins></li>
+    <li class="ins"><ins><strong>    initialBalance = _balance</strong></ins></li>
+    <li class="ins"><ins><strong>    calculatedFee = if initialBalance &lt; s.fee</strong></ins></li>
+    <li class="ins"><ins><strong>      initialBalance</strong></ins></li>
+    <li class="ins"><ins><strong>    else</strong></ins></li>
+    <li class="ins"><ins><strong>      s.fee</strong></ins></li>
+    <li class="ins"><ins><strong>    end</strong></ins></li>
+    <li class="ins"><ins><strong>    if calculatedFee &gt; 0</strong></ins></li>
+    <li class="ins"><ins><strong>      _transfer(s.owner, calculatedFee)</strong></ins></li>
+    <li class="ins"><ins><strong>    end</strong></ins></li>
+    <li class="ins"><ins><strong>    _approve(addressToCall, initialBalance - calculatedFee)</strong></ins></li>
+    <li class="ins"><ins><strong>    (success, data) = addressToCall.call(calldata)</strong></ins></li>
+    <li class="ins"><ins><strong>    _approve(addressToCall, 0)</strong></ins></li>
+    <li class="ins"><ins><strong>    finalBalance = _balance</strong></ins></li>
+    <li class="ins"><ins><strong>    if finalBalance &gt; 0</strong></ins></li>
+    <li class="ins"><ins><strong>      _transfer(bridgingUser, finalBalance)</strong></ins></li>
+    <li class="ins"><ins><strong>    end</strong></ins></li>
+    <li class="ins"><ins><strong>    s.locked=false</strong></ins></li>
+    <li class="ins"><ins><strong>    emit(:CallFromBridge, bridgingUser: bridgingUser, addressToCall: addressToCall, calldata: calldata, initialAmount: initialBalance, finalAmount: finalBalance, feeAmount: calculatedFee, resultStatus: success, resultData: data)</strong></ins></li>
+    <li class="ins"><ins><strong>  }</strong></ins></li>
+    <li class="ins"><ins><strong>  function(:_balance, :internal, :view, returns: :uint256) {</strong></ins></li>
+    <li class="ins"><ins><strong>    ERC20(s.bridge).balanceOf(address(this))</strong></ins></li>
+    <li class="ins"><ins><strong>  }</strong></ins></li>
+    <li class="ins"><ins><strong>  function(:_approve, { spender: :address, amount: :uint256 }, :internal, returns: :bool) {</strong></ins></li>
+    <li class="ins"><ins><strong>    ERC20(s.bridge).approve(spender, amount)</strong></ins></li>
+    <li class="ins"><ins><strong>  }</strong></ins></li>
+    <li class="ins"><ins><strong>  function(:_transfer, { to: :address, amount: :uint256 }, :internal, returns: :bool) {</strong></ins></li>
+    <li class="ins"><ins><strong>    ERC20(s.bridge).transfer(to, amount)</strong></ins></li>
+    <li class="ins"><ins><strong>  }</strong></ins></li>
+    <li class="ins"><ins><strong>}</strong></ins></li>
+    <li class="ins"><ins><strong>contract(:EtherBridge02, is: [:ERC20, :Upgradeable, :Own</strong>able], upgradeable: true) {</ins></li>
+    <li class="unchanged"><span>  event(:BridgedIn, { to: :address, amount: :uint256 })</span></li>
+    <li class="unchanged"><span>  event(:InitiateWithdrawal, { from: :address, amount: :uint256, withdrawalId: :bytes32 })</span></li>
+    <li class="unchanged"><span>  event(:WithdrawalComplete, { to: :address, amount: :uint256, withdrawalId: :bytes32 })</span></li>
+    <li class="unchanged"><span>  address(:public, :trustedSmartContract)</span></li>
+    <li class="ins"><ins>  address(:public, :bridgeAndCallHelper)</ins></li>
+    <li class="unchanged"><span>  mapping(({ bytes32: :uint256 }), :public, :withdrawalIdAmount)</span></li>
+    <li class="unchanged"><span>  mapping(({ address: :bytes32 }), :public, :userWithdrawalId)</span></li>
+    <li class="del"><del>  constructor(name: :string, symbol: :string, trustedSmartContract: :address) {</del></li>
+    <li class="ins"><ins>  constructor(name: :string, symbol: :string, trustedSmartContract: :address<strong>, bridgeAndCallHelper: :address</strong>) {</ins></li>
+    <li class="unchanged"><span>    require(trustedSmartContract != address(0), &quot;Invalid smart contract&quot;)</span></li>
+    <li class="unchanged"><span>    self.ERC20.constructor(name: name, symbol: symbol, decimals: 18)</span></li>
+    <li class="unchanged"><span>    self.Upgradeable.constructor(upgradeAdmin: msg.sender)</span></li>
+    <li class="ins"><ins>    self.Ownable.constructor(owner: msg.sender)</ins></li>
+    <li class="unchanged"><span>    s.trustedSmartContract=trustedSmartContract</span></li>
+    <li class="ins"><ins>    s.bridgeAndCallHelper=bridgeAndCallHelper</ins></li>
+    <li class="unchanged"><span>  }</span></li>
+    <li class="ins"><ins>  function(:onUpgrade, { owner: :address, bridgeAndCallHelper: :address }, :public) {</ins></li>
+    <li class="ins"><ins>    require(msg.sender == address(this), &quot;Only the contract itself can upgrade&quot;)</ins></li>
+    <li class="ins"><ins>    s.owner=owner</ins></li>
+    <li class="ins"><ins>    s.bridgeAndCallHelper=bridgeAndCallHelper</ins></li>
+    <li class="ins"><ins>    return nil</ins></li>
+    <li class="ins"><ins>  }</ins></li>
+    <li class="ins"><ins>  function(:setBridgeAndCallHelper, { bridgeAndCallHelper: :address }, :public) {</ins></li>
+    <li class="ins"><ins>    onlyOwner!</ins></li>
+    <li class="ins"><ins>    s.bridgeAndCallHelper=bridgeAndCallHelper</ins></li>
+    <li class="ins"><ins>    nil</ins></li>
+    <li class="ins"><ins>  }</ins></li>
+    <li class="unchanged"><span>  function(:bridgeIn, { to: :address, amount: :uint256 }, :public) {</span></li>
+    <li class="unchanged"><span>    require(msg.sender == s.trustedSmartContract, &quot;Only the trusted smart contract can bridge in tokens&quot;)</span></li>
+    <li class="unchanged"><span>    _mint(to: to, amount: amount)</span></li>
+    <li class="unchanged"><span>    emit(:BridgedIn, to: to, amount: amount)</span></li>
+    <li class="unchanged"><span>  }</span></li>
+    <li class="ins"><ins>  function(:bridgeAndCall, { to: :address, amount: :uint256, addressToCall: :address, base64Calldata: :string }, :public) {</ins></li>
+    <li class="ins"><ins>    if s.bridgeAndCallHelper == address(0)</ins></li>
+    <li class="ins"><ins>      return bridgeIn(to: to, amount: amount)</ins></li>
+    <li class="ins"><ins>    end</ins></li>
+    <li class="ins"><ins>    bridgeIn(to: s.bridgeAndCallHelper, amount: amount)</ins></li>
+    <li class="ins"><ins>    BridgeAndCallHelper(s.bridgeAndCallHelper).callFromBridge(bridgingUser: to, addressToCall: addressToCall, base64Calldata: base64Calldata)</ins></li>
+    <li class="ins"><ins>  }</ins></li>
+    <li class="unchanged"><span>  function(:bridgeOut, { amount: :uint256 }, :public) {</span></li>
+    <li class="unchanged"><span>    withdrawalId = tx.current_transaction_hash</span></li>
+    <li class="unchanged"><span>    require(s.userWithdrawalId[msg.sender] == bytes32(0), &quot;Withdrawal pending&quot;)</span></li>
+  </ul>
+</div>
+</body></html>

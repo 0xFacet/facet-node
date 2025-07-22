@@ -1,0 +1,90 @@
+<html><head><style>.diff{overflow:auto;}
+.diff ul{background:#fff;overflow:auto;font-size:13px;list-style:none;margin:0;padding:0;display:table;width:100%;}
+.diff del, .diff ins{display:block;text-decoration:none;}
+.diff li{padding:0; display:table-row;margin: 0;height:1em;}
+.diff li.ins{background:#dfd; color:#080}
+.diff li.del{background:#fee; color:#b00}
+.diff li:hover{background:#ffc}
+/* try 'whitespace:pre;' if you don't want lines to wrap */
+.diff del, .diff ins, .diff span{white-space:pre-wrap;font-family:courier;}
+.diff del strong{font-weight:normal;background:#fcc;}
+.diff ins strong{font-weight:normal;background:#9f9;}
+.diff li.diff-comment { display: none; }
+.diff li.diff-block-info { background: none repeat scroll 0 0 gray; }
+</style></head><body><div class="diff">
+  <ul>
+    <li class="unchanged"><span>  }</span></li>
+    <li class="unchanged"><span>}</span></li>
+    <li class="unchanged"><span>contract(:FacetPortV101, is: [:Upgradeable, :Ownable, :Pausable], upgradeable: true) {</span></li>
+    <li class="del"><del>  event(:OfferAccepted, { success: :bool, offerType: :string, offerer: :address, buyer: :address, seller: :address, <strong>ass</strong>etContract: :address, assetId: :uint256, considerationAmount: :uint256, considerationToken: :address, offerId: :bytes16 })</del></li>
+    <li class="ins"><ins>  event(:OfferAccepted, { success: :bool, offerType: :string, offerer: :address, buyer: :address, seller: :address, <strong>recipient: :address, ass</strong>etContract: :address, assetId: :uint256, considerationAmount: :uint256, considerationToken: :address, offerId: :bytes16 })</ins></li>
+    <li class="unchanged"><span>  event(:OfferCancelled, { offerer: :address, offerId: :bytes16 })</span></li>
+    <li class="unchanged"><span>  event(:AllOffersOnAssetCancelledForUser, { offerType: :string, offerer: :address, assetContract: :address, assetId: :uint256 })</span></li>
+    <li class="unchanged"><span>  event(:AllOffersCancelledForUser, { offerType: :string, offerer: :address })</span></li>
+    <li class="unchanged"><span>    onlyOwner!</span></li>
+    <li class="unchanged"><span>    _unpause</span></li>
+    <li class="unchanged"><span>  }</span></li>
+    <li class="del"><del>  function(:acceptOfferWithSignature, { offerType: :string, offerId: :bytes16, offerer: :address, assetContract: :address, assetId: :uint256, assetType: :string, assetAmount: :uint256, considerationToken: :address, considerationAmount: :uint256, startTime: :uint256, endTime: :uint256, signature: :bytes }, :external) {</del></li>
+    <li class="del"><del>    success = _acceptOfferWithSignature(offerType: offerType, offerId: offerId, offerer: offerer, assetContract: assetContract, assetId: assetId, assetType: assetType, assetAmount: assetAmount, considerationToken: considerationToken, considerationAmount: considerationAmount, startTime: startTime, endTime: endTime, signature: signature)</del></li>
+    <li class="ins"><ins>  function(:acceptOfferWithSignature, { offerType: :string, offerId: :bytes16, offerer: :address, <strong>recipient: :address, </strong>assetContract: :address, assetId: :uint256, assetType: :string, assetAmount: :uint256, considerationToken: :address, considerationAmount: :uint256, startTime: :uint256, endTime: :uint256, signature: :bytes }, :external) {</ins></li>
+    <li class="ins"><ins>    success = _acceptOfferWithSignature(offerType: offerType, offerId: offerId, offerer: offerer, <strong>recipient: recipient, </strong>assetContract: assetContract, assetId: assetId, assetType: assetType, assetAmount: assetAmount, considerationToken: considerationToken, considerationAmount: considerationAmount, startTime: startTime, endTime: endTime, signature: signature)</ins></li>
+    <li class="unchanged"><span>    require(success, &quot;Offer was not successfully accepted&quot;)</span></li>
+    <li class="unchanged"><span>  }</span></li>
+    <li class="del"><del>  function(:acceptMultipleOffersWithSignatures, { offerTypes: [:string], offerIds: [:bytes16], offere<strong>r</strong>s: [:address], assetContracts: [:address], assetIds: [:uint256], assetTypes: [:string], assetAmounts: [:uint256], considerationTokens: [:address], considerationAmounts: [:uint256], startTimes: [:uint256], endTimes: [:uint256], signatures: [:bytes] }, :external) {</del></li>
+    <li class="ins"><ins>  function(:acceptMultipleOffersWithSignatures, { offerTypes: [:string], offerIds: [:bytes16], offere<strong>rs: [:address], recipient</strong>s: [:address], assetContracts: [:address], assetIds: [:uint256], assetTypes: [:string], assetAmounts: [:uint256], considerationTokens: [:address], considerationAmounts: [:uint256], startTimes: [:uint256], endTimes: [:uint256], signatures: [:bytes] }, :external) {</ins></li>
+    <li class="unchanged"><span>    require(offerIds.length == offerers.length, &quot;Offer ID and offerer arrays must be the same length&quot;)</span></li>
+    <li class="unchanged"><span>    require(offerIds.length == offerTypes.length, &quot;Offer ID and offer types arrays must be the same length&quot;)</span></li>
+    <li class="unchanged"><span>    require(offerIds.length == assetContracts.length, &quot;Offer ID and asset contracts arrays must be the same length&quot;)</span></li>
+    <li class="unchanged"><span>    require(offerIds.length == startTimes.length, &quot;Offer ID and start times arrays must be the same length&quot;)</span></li>
+    <li class="unchanged"><span>    require(offerIds.length == endTimes.length, &quot;Offer ID and end times arrays must be the same length&quot;)</span></li>
+    <li class="unchanged"><span>    require(offerIds.length == signatures.length, &quot;Offer ID and signatures arrays must be the same length&quot;)</span></li>
+    <li class="ins"><ins>    require(offerIds.length == recipients.length, &quot;Offer ID and recipients arrays must be the same length&quot;)</ins></li>
+    <li class="unchanged"><span>    require(offerIds.length &lt;= 20, &quot;Cannot accept more than 20 offers at a time&quot;)</span></li>
+    <li class="unchanged"><span>    atLeastOneSuccess = false</span></li>
+    <li class="unchanged"><span>    forLoop(condition: -&gt;(i) {</span></li>
+    <li class="unchanged"><span>      i &lt; offerIds.length</span></li>
+    <li class="unchanged"><span>    }) { |i|</span></li>
+    <li class="del"><del>      success = _acceptOfferWithSignature(offerType: offerTypes[i], offerId: offerIds[i], offerer: offer<strong>er</strong>s[i], assetContract: assetContracts[i], assetId: assetIds[i], assetType: assetTypes[i], assetAmount: assetAmounts[i], considerationToken: considerationTokens[i], considerationAmount: considerationAmounts[i], startTime: startTimes[i], endTime: endTimes[i], signature: signatures[i])</del></li>
+    <li class="ins"><ins>      success = _acceptOfferWithSignature(offerType: offerTypes[i], offerId: offerIds[i], offerer: offer<strong>ers[i], recipient: recipient</strong>s[i], assetContract: assetContracts[i], assetId: assetIds[i], assetType: assetTypes[i], assetAmount: assetAmounts[i], considerationToken: considerationTokens[i], considerationAmount: considerationAmounts[i], startTime: startTimes[i], endTime: endTimes[i], signature: signatures[i])</ins></li>
+    <li class="unchanged"><span>      if success</span></li>
+    <li class="unchanged"><span>        atLeastOneSuccess = true</span></li>
+    <li class="unchanged"><span>      end</span></li>
+    <li class="unchanged"><span>    }</span></li>
+    <li class="unchanged"><span>    require(atLeastOneSuccess, &quot;No offers were successfully accepted&quot;)</span></li>
+    <li class="unchanged"><span>  }</span></li>
+    <li class="del"><del>  function(:_acceptOfferWithSignature, { offerType: :string, offerId: :bytes16, offerer: :address, <strong>ass</strong>etContract: :address, assetId: :uint256, assetType: :string, assetAmount: :uint256, considerationToken: :address, considerationAmount: :uint256, startTime: :uint256, endTime: :uint256, signature: :bytes }, :internal, returns: :bool) {</del></li>
+    <li class="ins"><ins>  function(:_acceptOfferWithSignature, { offerType: :string, offerId: :bytes16, offerer: :address, <strong>recipient: :address, ass</strong>etContract: :address, assetId: :uint256, assetType: :string, assetAmount: :uint256, considerationToken: :address, considerationAmount: :uint256, startTime: :uint256, endTime: :uint256, signature: :bytes }, :internal, returns: :bool) {</ins></li>
+    <li class="unchanged"><span>    whenNotPaused!</span></li>
+    <li class="unchanged"><span>    signatureValid = signature.verifyTypedDataSignature({ Offer: [{ name: &quot;offerType&quot;, type: &quot;string&quot; }, { name: &quot;offerId&quot;, type: &quot;bytes16&quot; }, { name: &quot;offerer&quot;, type: &quot;address&quot; }, { name: &quot;assetContract&quot;, type: &quot;address&quot; }, { name: &quot;assetId&quot;, type: &quot;uint256&quot; }, { name: &quot;assetType&quot;, type: &quot;string&quot; }, { name: &quot;assetAmount&quot;, type: &quot;uint256&quot; }, { name: &quot;considerationToken&quot;, type: &quot;address&quot; }, { name: &quot;considerationAmount&quot;, type: &quot;uint256&quot; }, { name: &quot;startTime&quot;, type: &quot;uint256&quot; }, { name: &quot;endTime&quot;, type: &quot;uint256&quot; }] }, { offerType: offerType, offerId: offerId, offerer: offerer, assetContract: assetContract, assetId: assetId, assetType: assetType, assetAmount: assetAmount, considerationToken: considerationToken, considerationAmount: considerationAmount, startTime: startTime, endTime: endTime }, verifyingContract: address(this), domainName: &quot;FacetPort&quot;, domainVersion: &quot;1&quot;, signer: offerer)</span></li>
+    <li class="unchanged"><span>    require(signatureValid, &quot;Invalid signature&quot;)</span></li>
+    <li class="unchanged"><span>    else</span></li>
+    <li class="unchanged"><span>      [msg.sender, offerer]</span></li>
+    <li class="unchanged"><span>    end</span></li>
+    <li class="del"><del>    transferSucceeded = _payRoyaltiesAndTransfer(assetContract: assetContract, assetId: assetId, seller: seller, buyer: buyer, considerationAmount: considerationAmount, considerationToken: considerationToken)</del></li>
+    <li class="del"><del>    emit(:OfferAccepted, { success: transferSucceeded, offerType: offerType, offerer: offerer, buyer: buyer, seller: seller, assetContract: assetContract, assetId: assetId, considerationAmount: considerationAmount, considerationToken: considerationToken, offerId: offerId })</del></li>
+    <li class="ins"><ins>    transferSucceeded = _payRoyaltiesAndTransfer(assetContract: assetContract, assetId: assetId, seller: seller, buyer: buyer<strong>, recipient: recipient</strong>, considerationAmount: considerationAmount, considerationToken: considerationToken)</ins></li>
+    <li class="ins"><ins>    emit(:OfferAccepted, { success: transferSucceeded, offerType: offerType, offerer: offerer, buyer: buyer, seller: seller, <strong>recipient: recipient, </strong>assetContract: assetContract, assetId: assetId, considerationAmount: considerationAmount, considerationToken: considerationToken, offerId: offerId })</ins></li>
+    <li class="unchanged"><span>    transferSucceeded</span></li>
+    <li class="unchanged"><span>  }</span></li>
+    <li class="del"><del>  function(:_payRoyaltiesAndTransfer, { assetContract: :address, assetId: :uint256, seller: :address, buyer: :address, <strong>c</strong>onsiderationAmount: :uint256, considerationToken: :address }, :internal, returns: :bool) {</del></li>
+    <li class="ins"><ins>  function(:_payRoyaltiesAndTransfer, { assetContract: :address, assetId: :uint256, seller: :address, buyer: :address, <strong>recipient: :address, c</strong>onsiderationAmount: :uint256, considerationToken: :address }, :internal, returns: :bool) {</ins></li>
+    <li class="ins"><ins><strong>    require(recipient == address(0) || msg.sender == buyer, &quot;Only buyer can add recipient&quot;)</strong></ins></li>
+    <li class="ins"><ins><strong></strong></ins></li>
+    <li class="unchanged"><span>    currentOwner = ERC721(assetContract).ownerOf(assetId)</span></li>
+    <li class="unchanged"><span>    unless currentOwner == seller</span></li>
+    <li class="unchanged"><span>      return false</span></li>
+    <li class="unchanged"><span>    if marketplaceFee &gt; 0</span></li>
+    <li class="unchanged"><span>      ERC20(considerationToken).transferFrom(from: buyer, to: owner, amount: marketplaceFee)</span></li>
+    <li class="unchanged"><span>    end</span></li>
+    <li class="del"><del>    _transferNFT(assetContract: assetContract, assetId: assetId, recipient: buyer, from: seller)</del></li>
+    <li class="ins"><ins>    _transferNFT(assetContract: assetContract, assetId: assetId, recipient: <strong>if recipient == address(0)</strong></ins></li>
+    <li class="ins"><ins><strong>      </strong>buyer<strong></strong></ins></li>
+    <li class="ins"><ins><strong>    else</strong></ins></li>
+    <li class="ins"><ins><strong>      recipient</strong></ins></li>
+    <li class="ins"><ins><strong>    end</strong>, from: seller)</ins></li>
+    <li class="unchanged"><span>    return true</span></li>
+    <li class="unchanged"><span>  }</span></li>
+    <li class="unchanged"><span>  function(:transferNFTs, { assetContracts: [:address], assetIds: [:uint256], recipients: [:address] }, :external) {</span></li>
+  </ul>
+</div>
+</body></html>

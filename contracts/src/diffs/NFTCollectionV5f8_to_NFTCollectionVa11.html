@@ -1,0 +1,65 @@
+<html><head><style>.diff{overflow:auto;}
+.diff ul{background:#fff;overflow:auto;font-size:13px;list-style:none;margin:0;padding:0;display:table;width:100%;}
+.diff del, .diff ins{display:block;text-decoration:none;}
+.diff li{padding:0; display:table-row;margin: 0;height:1em;}
+.diff li.ins{background:#dfd; color:#080}
+.diff li.del{background:#fee; color:#b00}
+.diff li:hover{background:#ffc}
+/* try 'whitespace:pre;' if you don't want lines to wrap */
+.diff del, .diff ins, .diff span{white-space:pre-wrap;font-family:courier;}
+.diff del strong{font-weight:normal;background:#fcc;}
+.diff ins strong{font-weight:normal;background:#9f9;}
+.diff li.diff-comment { display: none; }
+.diff li.diff-block-info { background: none repeat scroll 0 0 gray; }
+</style></head><body><div class="diff">
+  <ul>
+    <li class="unchanged"><span>  event(:MetadataRendererUpdated, { metadataRenderer: :string })</span></li>
+    <li class="unchanged"><span>  uint256(:public, :maxSupply)</span></li>
+    <li class="unchanged"><span>  uint256(:public, :totalSupply)</span></li>
+    <li class="ins"><ins>  uint256(:public, :nextTokenId)</ins></li>
+    <li class="unchanged"><span>  uint256(:public, :maxPerMint)</span></li>
+    <li class="unchanged"><span>  string(:public, :baseURI)</span></li>
+    <li class="unchanged"><span>  address(:public, :WETH)</span></li>
+    <li class="unchanged"><span>    s.maxSupply=maxSupply</span></li>
+    <li class="unchanged"><span>    s.baseURI=baseURI</span></li>
+    <li class="unchanged"><span>    s.WETH=weth</span></li>
+    <li class="del"><del>    s.maxPerMint=<strong>100</strong></del></li>
+    <li class="ins"><ins>    s.maxPerMint=<strong>25</strong></ins></li>
+    <li class="unchanged"><span>    s.perMintFee=perMintFee</span></li>
+    <li class="unchanged"><span>    s.feeTo=feeTo</span></li>
+    <li class="ins"><ins>    s.nextTokenId=1</ins></li>
+    <li class="unchanged"><span>  }</span></li>
+    <li class="unchanged"><span>  function(:_handleMint, { to: :address, amount: :uint256, merkleProof: [:bytes32] }, :internal) {</span></li>
+    <li class="unchanged"><span>    whenNotPaused!</span></li>
+    <li class="unchanged"><span>      require(s.WETH != address(0), &quot;WETH not set&quot;)</span></li>
+    <li class="unchanged"><span>      ERC20(s.WETH).transferFrom(msg.sender, address(this), totalCost)</span></li>
+    <li class="unchanged"><span>    end</span></li>
+    <li class="del"><del>    initialId = s.<strong>totalSupply + 1</strong></del></li>
+    <li class="ins"><ins>    initialId = s.<strong>nextTokenId</strong></ins></li>
+    <li class="ins"><ins><strong>    s.nextTokenId += amount</strong></ins></li>
+    <li class="unchanged"><span>    s.totalSupply += amount</span></li>
+    <li class="unchanged"><span>    forLoop(condition: -&gt;(i) {</span></li>
+    <li class="unchanged"><span>      i &lt; amount</span></li>
+    <li class="unchanged"><span>    s.baseURI=baseURI</span></li>
+    <li class="unchanged"><span>    emit(:BaseURIUpdated, baseURI: baseURI)</span></li>
+    <li class="unchanged"><span>  }</span></li>
+    <li class="ins"><ins>  function(:burn, { tokenId: :uint256 }, :public) {</ins></li>
+    <li class="ins"><ins>    require(isApprovedOrOwner(spender: msg.sender, id: tokenId), &quot;ERC721: msg.sender not authorized to burn id #{tokenId.toString}&quot;)</ins></li>
+    <li class="ins"><ins>    s.totalSupply -= 1</ins></li>
+    <li class="ins"><ins>    _burn(tokenId)</ins></li>
+    <li class="ins"><ins>  }</ins></li>
+    <li class="ins"><ins>  function(:burnMultiple, { tokenIds: [:uint256] }, :public) {</ins></li>
+    <li class="ins"><ins>    require(tokenIds.length &gt; 0, &quot;No token ids provided&quot;)</ins></li>
+    <li class="ins"><ins>    require(tokenIds.length &lt;= 20, &quot;Too many token ids provided&quot;)</ins></li>
+    <li class="ins"><ins>    forLoop(condition: -&gt;(i) {</ins></li>
+    <li class="ins"><ins>      i &lt; tokenIds.length</ins></li>
+    <li class="ins"><ins>    }, max_iterations: 20) { |i|</ins></li>
+    <li class="ins"><ins>      burn(tokenIds[i])</ins></li>
+    <li class="ins"><ins>    }</ins></li>
+    <li class="ins"><ins>  }</ins></li>
+    <li class="unchanged"><span>  function(:pause, :public) {</span></li>
+    <li class="unchanged"><span>    onlyOwner!</span></li>
+    <li class="unchanged"><span>    _pause</span></li>
+  </ul>
+</div>
+</body></html>

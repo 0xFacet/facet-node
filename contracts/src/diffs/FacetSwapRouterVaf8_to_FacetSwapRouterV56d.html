@@ -1,0 +1,81 @@
+<html><head><style>.diff{overflow:auto;}
+.diff ul{background:#fff;overflow:auto;font-size:13px;list-style:none;margin:0;padding:0;display:table;width:100%;}
+.diff del, .diff ins{display:block;text-decoration:none;}
+.diff li{padding:0; display:table-row;margin: 0;height:1em;}
+.diff li.ins{background:#dfd; color:#080}
+.diff li.del{background:#fee; color:#b00}
+.diff li:hover{background:#ffc}
+/* try 'whitespace:pre;' if you don't want lines to wrap */
+.diff del, .diff ins, .diff span{white-space:pre-wrap;font-family:courier;}
+.diff del strong{font-weight:normal;background:#fcc;}
+.diff ins strong{font-weight:normal;background:#9f9;}
+.diff li.diff-comment { display: none; }
+.diff li.diff-block-info { background: none repeat scroll 0 0 gray; }
+</style></head><body><div class="diff">
+  <ul>
+    <li class="unchanged"><span>    require(!s.paused, &quot;Contract is paused&quot;)</span></li>
+    <li class="unchanged"><span>  }</span></li>
+    <li class="unchanged"><span>}</span></li>
+    <li class="del"><del>contract(:FacetSwapV1Router0<strong>2</strong>, is: [:Ownable, :Upgradeable, :Pausable], upgradeable: true) {</del></li>
+    <li class="ins"><ins>contract(:FacetSwapV1Router0<strong>3</strong>, is: [:Ownable, :Upgradeable, :Pausable], upgradeable: true) {</ins></li>
+    <li class="unchanged"><span>  address(:public, :factory)</span></li>
+    <li class="unchanged"><span>  address(:public, :WETH)</span></li>
+    <li class="unchanged"><span>  uint8(:public, :maxPathLength)</span></li>
+    <li class="unchanged"><span>    else</span></li>
+    <li class="unchanged"><span>      amountIn</span></li>
+    <li class="unchanged"><span>    end</span></li>
+    <li class="del"><del>    amounts = _swapExactTokensForTokens(amountIn: amountInWithFee, amountOutMin: amountOutMin, path: path, to: <strong>to</strong>, deadline: deadline)</del></li>
+    <li class="ins"><ins>    amounts = _swapExactTokensForTokens(amountIn: amountInWithFee, amountOutMin: amountOutMin, path: path, to: <strong>address(this)</strong>, deadline: deadline)</ins></li>
+    <li class="unchanged"><span>    amountToChargeFeeOn = if path[0] == s.WETH</span></li>
+    <li class="unchanged"><span>      amountIn</span></li>
+    <li class="unchanged"><span>    else</span></li>
+    <li class="unchanged"><span>      amounts[amounts.length - 1]</span></li>
+    <li class="unchanged"><span>    end</span></li>
+    <li class="unchanged"><span>    feeAmount = calculateFeeAmount(amountToChargeFeeOn)</span></li>
+    <li class="del"><del>    chargeWethFee(feeAmount)</del></li>
+    <li class="unchanged"><span>    if path[0] == s.WETH</span></li>
+    <li class="unchanged"><span>      amounts[0] = amountIn</span></li>
+    <li class="ins"><ins>      ERC20(s.WETH).transferFrom(from: msg.sender, to: address(this), amount: feeAmount)</ins></li>
+    <li class="unchanged"><span>    else</span></li>
+    <li class="unchanged"><span>      amounts[amounts.length - 1] -= feeAmount</span></li>
+    <li class="unchanged"><span>    end</span></li>
+    <li class="ins"><ins>    outputToken = ERC20(path[path.length - 1])</ins></li>
+    <li class="ins"><ins>    outputToken.transfer(to, amounts[amounts.length - 1])</ins></li>
+    <li class="unchanged"><span>    emit(:FeeAdjustedSwap, inputToken: path[0], outputToken: path[path.length - 1], inputAmount: amounts[0], outputAmount: amounts[amounts.length - 1], feeAmount: feeAmount, to: to)</span></li>
+    <li class="unchanged"><span>    amounts</span></li>
+    <li class="unchanged"><span>  }</span></li>
+    <li class="unchanged"><span>    else</span></li>
+    <li class="unchanged"><span>      amountOut</span></li>
+    <li class="unchanged"><span>    end</span></li>
+    <li class="del"><del>    amounts = _swapTokensForExactTokens(amountOut: amountOutWithFee, amountInMax: amountInMax, path: path, to: <strong>to</strong>, deadline: deadline)</del></li>
+    <li class="ins"><ins>    amounts = _swapTokensForExactTokens(amountOut: amountOutWithFee, amountInMax: amountInMax, path: path, to: <strong>address(this)</strong>, deadline: deadline)</ins></li>
+    <li class="unchanged"><span>    amountToChargeFeeOn = if path[0] == s.WETH</span></li>
+    <li class="unchanged"><span>      amounts[0]</span></li>
+    <li class="unchanged"><span>    else</span></li>
+    <li class="unchanged"><span>      amountOut</span></li>
+    <li class="unchanged"><span>    end</span></li>
+    <li class="unchanged"><span>    feeAmount = calculateFeeAmount(amountToChargeFeeOn)</span></li>
+    <li class="del"><del>    chargeWethFee(feeAmount)</del></li>
+    <li class="unchanged"><span>    if path[0] == s.WETH</span></li>
+    <li class="unchanged"><span>      amounts[0] += feeAmount</span></li>
+    <li class="ins"><ins>      ERC20(s.WETH).transferFrom(from: msg.sender, to: address(this), amount: feeAmount)</ins></li>
+    <li class="unchanged"><span>    else</span></li>
+    <li class="unchanged"><span>      amounts[amounts.length - 1] = amountOut</span></li>
+    <li class="unchanged"><span>    end</span></li>
+    <li class="ins"><ins>    outputToken = ERC20(path[path.length - 1])</ins></li>
+    <li class="ins"><ins>    outputToken.transfer(to, amounts[amounts.length - 1])</ins></li>
+    <li class="unchanged"><span>    emit(:FeeAdjustedSwap, inputToken: path[0], outputToken: path[path.length - 1], inputAmount: amounts[0], outputAmount: amounts[amounts.length - 1], feeAmount: feeAmount, to: to)</span></li>
+    <li class="unchanged"><span>    amounts</span></li>
+    <li class="unchanged"><span>  }</span></li>
+    <li class="unchanged"><span>    require(token0 != address(0), &quot;FacetSwapV1Library: ZERO_ADDRESS&quot;)</span></li>
+    <li class="unchanged"><span>    return { token0: token0, token1: token1 }</span></li>
+    <li class="unchanged"><span>  }</span></li>
+    <li class="del"><del>  function(:chargeWethFee, { feeAmount: :uint256 }, :internal, returns: :bool) {</del></li>
+    <li class="del"><del>    ERC20(s.WETH).transferFrom(from: msg.sender, to: address(this), amount: feeAmount)</del></li>
+    <li class="del"><del>  }</del></li>
+    <li class="unchanged"><span>  function(:calculateFeeAmount, { amount: :uint256 }, :public, :view, returns: :uint256) {</span></li>
+    <li class="unchanged"><span>    return (amount * s.protocolFeeBPS).div(10000)</span></li>
+    <li class="unchanged"><span>  }</span></li>
+  </ul>
+</div>
+</body></html>

@@ -15,7 +15,6 @@ class EthTransaction < T::Struct
   const :eth_block, T.nilable(EthBlock)
   const :facet_transactions, T::Array[FacetTransaction], default: []
   
-  FACET_INBOX_ADDRESS = Address20.from_hex("0x00000000000000000000000000000000000face7")
   FacetLogInboxEventSig = ByteString.from_hex("0x00000000000000000000000000000000000000000000000000000000000face7")
 
   sig { params(block_result: T.untyped, receipt_result: T.untyped).returns(T::Array[EthTransaction]) }
@@ -64,8 +63,9 @@ class EthTransaction < T::Struct
     FacetTransaction.from_payload(
       contract_initiated: false,
       from_address: from_address,
-      eth_transaction_input: input,
-      tx_hash: tx_hash
+      input: input,
+      tx_hash: tx_hash,
+      block_hash: block_hash
     )
   end
   
@@ -75,8 +75,9 @@ class EthTransaction < T::Struct
       facet_tx = FacetTransaction.from_payload(
         contract_initiated: true,
         from_address: Address20.from_hex(log['address']),
-        eth_transaction_input: ByteString.from_hex(log['data']),
-        tx_hash: tx_hash
+        input: ByteString.from_hex(log['data']),
+        tx_hash: tx_hash,
+        block_hash: block_hash
       )
       return facet_tx if facet_tx
     end
