@@ -45,7 +45,7 @@ module SysConfig
 
     block_num = delta / L2_BLOCK_TIME
 
-    unless block_num.multiple_of?(10_000) || !Rails.env.production? # TODO: Remove this once we're on mainnet
+    unless block_num.multiple_of?(10_000) || allow_unsafe_bluebird_fork_block_number?
       raise ArgumentError, "Bluebird fork block number (#{block_num}) must be a multiple of 10,000"
     end
 
@@ -64,6 +64,10 @@ module SysConfig
     else
       raise "BLUEBIRD_TIMESTAMP or BLUEBIRD_L2_BLOCK must be set"
     end
+  end
+  
+  def allow_unsafe_bluebird_fork_block_number?
+    ENV['ALLOW_UNSAFE_BLUEBIRD_FORK_BLOCK_NUMBER'] == 'true'
   end
   
   def is_bluebird_fork_block?(block)

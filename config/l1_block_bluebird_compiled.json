@@ -1,0 +1,372 @@
+{
+  "L1Block": {
+    "abi": [
+      {
+        "type": "function",
+        "name": "DEPOSITOR_ACCOUNT",
+        "inputs": [],
+        "outputs": [
+          {
+            "name": "addr_",
+            "type": "address",
+            "internalType": "address"
+          }
+        ],
+        "stateMutability": "pure"
+      },
+      {
+        "type": "function",
+        "name": "baseFeeScalar",
+        "inputs": [],
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint32",
+            "internalType": "uint32"
+          }
+        ],
+        "stateMutability": "view"
+      },
+      {
+        "type": "function",
+        "name": "basefee",
+        "inputs": [],
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "view"
+      },
+      {
+        "type": "function",
+        "name": "batcherHash",
+        "inputs": [],
+        "outputs": [
+          {
+            "name": "",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          }
+        ],
+        "stateMutability": "view"
+      },
+      {
+        "type": "function",
+        "name": "blobBaseFee",
+        "inputs": [],
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "view"
+      },
+      {
+        "type": "function",
+        "name": "blobBaseFeeScalar",
+        "inputs": [],
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint32",
+            "internalType": "uint32"
+          }
+        ],
+        "stateMutability": "view"
+      },
+      {
+        "type": "function",
+        "name": "fctDetails",
+        "inputs": [],
+        "outputs": [
+          {
+            "name": "",
+            "type": "tuple",
+            "internalType": "struct L1Block.FctDetails",
+            "components": [
+              {
+                "name": "mintRate",
+                "type": "uint128",
+                "internalType": "uint128"
+              },
+              {
+                "name": "totalMinted",
+                "type": "uint128",
+                "internalType": "uint128"
+              },
+              {
+                "name": "periodStartBlock",
+                "type": "uint128",
+                "internalType": "uint128"
+              },
+              {
+                "name": "periodMinted",
+                "type": "uint128",
+                "internalType": "uint128"
+              }
+            ]
+          }
+        ],
+        "stateMutability": "view"
+      },
+      {
+        "type": "function",
+        "name": "fctMintPeriodL1DataGas",
+        "inputs": [],
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint128",
+            "internalType": "uint128"
+          }
+        ],
+        "stateMutability": "view"
+      },
+      {
+        "type": "function",
+        "name": "fctMintRate",
+        "inputs": [],
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint128",
+            "internalType": "uint128"
+          }
+        ],
+        "stateMutability": "view"
+      },
+      {
+        "type": "function",
+        "name": "fctPeriodMinted",
+        "inputs": [],
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint128",
+            "internalType": "uint128"
+          }
+        ],
+        "stateMutability": "view"
+      },
+      {
+        "type": "function",
+        "name": "fctPeriodStartBlock",
+        "inputs": [],
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint128",
+            "internalType": "uint128"
+          }
+        ],
+        "stateMutability": "view"
+      },
+      {
+        "type": "function",
+        "name": "fctTotalMinted",
+        "inputs": [],
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint128",
+            "internalType": "uint128"
+          }
+        ],
+        "stateMutability": "view"
+      },
+      {
+        "type": "function",
+        "name": "gasPayingToken",
+        "inputs": [],
+        "outputs": [
+          {
+            "name": "addr_",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "decimals_",
+            "type": "uint8",
+            "internalType": "uint8"
+          }
+        ],
+        "stateMutability": "view"
+      },
+      {
+        "type": "function",
+        "name": "gasPayingTokenName",
+        "inputs": [],
+        "outputs": [
+          {
+            "name": "name_",
+            "type": "string",
+            "internalType": "string"
+          }
+        ],
+        "stateMutability": "view"
+      },
+      {
+        "type": "function",
+        "name": "gasPayingTokenSymbol",
+        "inputs": [],
+        "outputs": [
+          {
+            "name": "symbol_",
+            "type": "string",
+            "internalType": "string"
+          }
+        ],
+        "stateMutability": "view"
+      },
+      {
+        "type": "function",
+        "name": "hash",
+        "inputs": [],
+        "outputs": [
+          {
+            "name": "",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          }
+        ],
+        "stateMutability": "view"
+      },
+      {
+        "type": "function",
+        "name": "isCustomGasToken",
+        "inputs": [],
+        "outputs": [
+          {
+            "name": "",
+            "type": "bool",
+            "internalType": "bool"
+          }
+        ],
+        "stateMutability": "view"
+      },
+      {
+        "type": "function",
+        "name": "l1FeeOverhead",
+        "inputs": [],
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "view"
+      },
+      {
+        "type": "function",
+        "name": "l1FeeScalar",
+        "inputs": [],
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "view"
+      },
+      {
+        "type": "function",
+        "name": "number",
+        "inputs": [],
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint64",
+            "internalType": "uint64"
+          }
+        ],
+        "stateMutability": "view"
+      },
+      {
+        "type": "function",
+        "name": "sequenceNumber",
+        "inputs": [],
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint64",
+            "internalType": "uint64"
+          }
+        ],
+        "stateMutability": "view"
+      },
+      {
+        "type": "function",
+        "name": "setL1BlockValuesEcotone",
+        "inputs": [],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "type": "function",
+        "name": "timestamp",
+        "inputs": [],
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint64",
+            "internalType": "uint64"
+          }
+        ],
+        "stateMutability": "view"
+      },
+      {
+        "type": "function",
+        "name": "version",
+        "inputs": [],
+        "outputs": [
+          {
+            "name": "",
+            "type": "string",
+            "internalType": "string"
+          }
+        ],
+        "stateMutability": "pure"
+      },
+      {
+        "type": "event",
+        "name": "GasPayingTokenSet",
+        "inputs": [
+          {
+            "name": "token",
+            "type": "address",
+            "indexed": true,
+            "internalType": "address"
+          },
+          {
+            "name": "decimals",
+            "type": "uint8",
+            "indexed": true,
+            "internalType": "uint8"
+          },
+          {
+            "name": "name",
+            "type": "bytes32",
+            "indexed": false,
+            "internalType": "bytes32"
+          },
+          {
+            "name": "symbol",
+            "type": "bytes32",
+            "indexed": false,
+            "internalType": "bytes32"
+          }
+        ],
+        "anonymous": false
+      }
+    ],
+    "bytecode": "6080806040523461001657610886908161001b8239f35b5f80fdfe60806040526004361015610011575f80fd5b5f3560e01c806309bd5a601461019457806314ea9f1f1461018f578063213268491461018a57806332e6d8f8146101855780634397dfef14610180578063440a5e201461017b57806354fd4d5014610176578063550fcdc9146101715780635cf249691461016c57806364ca23ef1461016757806368d5dca6146101625780636e69101b1461015d578063777e7b04146101585780638381f58a146101535780638b239f731461014e5780639e8c496614610149578063b80777ea14610144578063c59859181461013f578063d84447151461013a578063e591b28214610135578063e81b2c6d14610130578063ee902b831461012b578063f8206140146101265763fc5be70614610121575f80fd5b610699565b61067c565b610656565b610639565b61060b565b61056b565b610545565b61051c565b6104ff565b6104e2565b6104bc565b61049c565b61047c565b610456565b61042f565b610412565b61037c565b610338565b61027a565b610245565b61021f565b6101db565b6101b5565b346101b1575f3660031901126101b1576020600254604051908152f35b5f80fd5b346101b1575f3660031901126101b15760206001600160801b0360085416604051908152f35b346101b1575f3660031901126101b15760206101f56107c8565b506040516001600160a01b0390911673eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee14158152f35b346101b1575f3660031901126101b15760206001600160801b0360095416604051908152f35b346101b1575f3660031901126101b157604060ff6102616107c8565b83516001600160a01b0390921682529091166020820152f35b346101b1575f3660031901126101b15773deaddeaddeaddeaddeaddeaddeaddeaddead000133186102e45760043560801c60035560143560801c5f5560243560015560443560075560643560025560843560045560a43560085560c43560095560e435600a555f80f35b633cc50b455f526004601cfd5b602080825282518183018190529093925f5b82811061032457505060409293505f838284010152601f8019910116010190565b818101860151848201604001528501610303565b346101b1575f3660031901126101b1576103786103536107a8565b600c81526b312e342e312d626574612e3160a01b6020820152604051918291826102f1565b0390f35b346101b1575f3660031901126101b15773face7face7face7face7face7face7face7face76103a96107c8565b506001600160a01b0316036103e0576103786103c36107a8565b60038152621190d560ea1b60208201525b604051918291826102f1565b61037861040d7fa48b38a4b44951360fbdcbfaaeae5ed6ae92585412e9841b70ec72ed8cd0576354610821565b6103d4565b346101b1575f3660031901126101b1576020600154604051908152f35b346101b1575f3660031901126101b157602067ffffffffffffffff60035416604051908152f35b346101b1575f3660031901126101b157602060035463ffffffff6040519160401c168152f35b346101b1575f3660031901126101b157602060085460801c604051908152f35b346101b1575f3660031901126101b157602060095460801c604051908152f35b346101b1575f3660031901126101b157602067ffffffffffffffff5f5416604051908152f35b346101b1575f3660031901126101b1576020600554604051908152f35b346101b1575f3660031901126101b1576020600654604051908152f35b346101b1575f3660031901126101b15760205f5467ffffffffffffffff6040519160401c168152f35b346101b1575f3660031901126101b157602063ffffffff60035460601c16604051908152f35b346101b1575f3660031901126101b15773face7face7face7face7face7face7face7face76105986107c8565b506001600160a01b0316036105de576103786105b26107a8565b60138152722330b1b2ba1021b7b6b83aba32902a37b5b2b760691b6020820152604051918291826102f1565b61037861040d7f657c3582c29b3176614e3a33ddd1ec48352696a04e92b3c0566d72010fa8863c54610821565b346101b1575f3660031901126101b157602060405173deaddeaddeaddeaddeaddeaddeaddeaddead00018152f35b346101b1575f3660031901126101b1576020600454604051908152f35b346101b1575f3660031901126101b15760206001600160801b03600a5416604051908152f35b346101b1575f3660031901126101b1576020600754604051908152f35b346101b1575f3660031901126101b1575f60606106b4610783565b82815282602082015282604082015201526103786001600160801b0361072e81600854169161071e60095461071483600a5416936107026106f3610783565b6001600160801b039098168852565b82166001600160801b03166020870152565b60801c6040850152565b6001600160801b03166060830152565b6040519182918291909160606080820193816001600160801b0391828151168552826020820151166020860152826040820151166040860152015116910152565b634e487b7160e01b5f52604160045260245ffd5b604051906080820182811067ffffffffffffffff8211176107a357604052565b61076f565b604051906040820182811067ffffffffffffffff8211176107a357604052565b7f04adb1412b2ddc16fcc0d4538d5c8f07cf9c83abecc6b41f6f69037b708fbceb546001600160a01b038116919082610818575073face7face7face7face7face7face7face7face79150601290565b60a01c60ff1690565b90604051915f5b81811a61084857805f926020928652828601528401015260408201604052565b60010161082856fea264697066735822122081e5d6593a74fa4d687c21d6a8fe1f42d7b0f40f6579f17417b210bcf5f8460664736f6c63430008180033",
+    "bin_runtime": "60806040526004361015610011575f80fd5b5f3560e01c806309bd5a601461019457806314ea9f1f1461018f578063213268491461018a57806332e6d8f8146101855780634397dfef14610180578063440a5e201461017b57806354fd4d5014610176578063550fcdc9146101715780635cf249691461016c57806364ca23ef1461016757806368d5dca6146101625780636e69101b1461015d578063777e7b04146101585780638381f58a146101535780638b239f731461014e5780639e8c496614610149578063b80777ea14610144578063c59859181461013f578063d84447151461013a578063e591b28214610135578063e81b2c6d14610130578063ee902b831461012b578063f8206140146101265763fc5be70614610121575f80fd5b610699565b61067c565b610656565b610639565b61060b565b61056b565b610545565b61051c565b6104ff565b6104e2565b6104bc565b61049c565b61047c565b610456565b61042f565b610412565b61037c565b610338565b61027a565b610245565b61021f565b6101db565b6101b5565b346101b1575f3660031901126101b1576020600254604051908152f35b5f80fd5b346101b1575f3660031901126101b15760206001600160801b0360085416604051908152f35b346101b1575f3660031901126101b15760206101f56107c8565b506040516001600160a01b0390911673eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee14158152f35b346101b1575f3660031901126101b15760206001600160801b0360095416604051908152f35b346101b1575f3660031901126101b157604060ff6102616107c8565b83516001600160a01b0390921682529091166020820152f35b346101b1575f3660031901126101b15773deaddeaddeaddeaddeaddeaddeaddeaddead000133186102e45760043560801c60035560143560801c5f5560243560015560443560075560643560025560843560045560a43560085560c43560095560e435600a555f80f35b633cc50b455f526004601cfd5b602080825282518183018190529093925f5b82811061032457505060409293505f838284010152601f8019910116010190565b818101860151848201604001528501610303565b346101b1575f3660031901126101b1576103786103536107a8565b600c81526b312e342e312d626574612e3160a01b6020820152604051918291826102f1565b0390f35b346101b1575f3660031901126101b15773face7face7face7face7face7face7face7face76103a96107c8565b506001600160a01b0316036103e0576103786103c36107a8565b60038152621190d560ea1b60208201525b604051918291826102f1565b61037861040d7fa48b38a4b44951360fbdcbfaaeae5ed6ae92585412e9841b70ec72ed8cd0576354610821565b6103d4565b346101b1575f3660031901126101b1576020600154604051908152f35b346101b1575f3660031901126101b157602067ffffffffffffffff60035416604051908152f35b346101b1575f3660031901126101b157602060035463ffffffff6040519160401c168152f35b346101b1575f3660031901126101b157602060085460801c604051908152f35b346101b1575f3660031901126101b157602060095460801c604051908152f35b346101b1575f3660031901126101b157602067ffffffffffffffff5f5416604051908152f35b346101b1575f3660031901126101b1576020600554604051908152f35b346101b1575f3660031901126101b1576020600654604051908152f35b346101b1575f3660031901126101b15760205f5467ffffffffffffffff6040519160401c168152f35b346101b1575f3660031901126101b157602063ffffffff60035460601c16604051908152f35b346101b1575f3660031901126101b15773face7face7face7face7face7face7face7face76105986107c8565b506001600160a01b0316036105de576103786105b26107a8565b60138152722330b1b2ba1021b7b6b83aba32902a37b5b2b760691b6020820152604051918291826102f1565b61037861040d7f657c3582c29b3176614e3a33ddd1ec48352696a04e92b3c0566d72010fa8863c54610821565b346101b1575f3660031901126101b157602060405173deaddeaddeaddeaddeaddeaddeaddeaddead00018152f35b346101b1575f3660031901126101b1576020600454604051908152f35b346101b1575f3660031901126101b15760206001600160801b03600a5416604051908152f35b346101b1575f3660031901126101b1576020600754604051908152f35b346101b1575f3660031901126101b1575f60606106b4610783565b82815282602082015282604082015201526103786001600160801b0361072e81600854169161071e60095461071483600a5416936107026106f3610783565b6001600160801b039098168852565b82166001600160801b03166020870152565b60801c6040850152565b6001600160801b03166060830152565b6040519182918291909160606080820193816001600160801b0391828151168552826020820151166020860152826040820151166040860152015116910152565b634e487b7160e01b5f52604160045260245ffd5b604051906080820182811067ffffffffffffffff8211176107a357604052565b61076f565b604051906040820182811067ffffffffffffffff8211176107a357604052565b7f04adb1412b2ddc16fcc0d4538d5c8f07cf9c83abecc6b41f6f69037b708fbceb546001600160a01b038116919082610818575073face7face7face7face7face7face7face7face79150601290565b60a01c60ff1690565b90604051915f5b81811a61084857805f926020928652828601528401015260408201604052565b60010161082856fea264697066735822122081e5d6593a74fa4d687c21d6a8fe1f42d7b0f40f6579f17417b210bcf5f8460664736f6c63430008180033"
+  }
+}
