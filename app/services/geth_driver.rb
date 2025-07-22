@@ -48,7 +48,7 @@ module GethDriver
     
     system_txs = [new_facet_block.attributes_tx]
     
-    if SysConfig.is_first_v2_block?(new_facet_block)
+    if new_facet_block.number == 1
       migration_manager_address = "0x22220000000000000000000000000000000000d6"
       function_selector = ByteString.from_bin(Eth::Util.keccak256('transactionsRequired()').first(4)).to_hex
 
@@ -65,22 +65,24 @@ module GethDriver
       end
     end
 
-    if SysConfig.is_second_v2_block?(new_facet_block)
-      first_block_receipts = EthRpcClient.l2.get_block_receipts(1)
-      
-      failed_system_txs = first_block_receipts.select do |receipt|
-        FacetTransaction::SYSTEM_ADDRESS == Address20.from_hex(receipt['from']) &&
-        receipt['status'] != '0x1'
-      end
-      
-      unless failed_system_txs.empty?
-        failed_system_txs.each do |tx|
-          trace = EthRpcClient.l2.trace_transaction(tx['transactionHash'])
-          ap trace
-        end
-        
-        raise "First v2 block system transactions did not execute successfully"
-      end
+    if new_facet_block.number == 2
+      check_failed_system_txs(1, "First v2 block")
+    end
+    
+    # Add L1Block implementation deployment and upgrade at fork block
+    if new_facet_block.number == SysConfig.bluebird_fork_block_number - 1
+      # Get the nonce at the beginning of the block
+      start_nonce = EthRpcClient.l2.get_nonce(FacetTransaction::SYSTEM_ADDRESS.to_hex)
+
+      # system_txs already contains all txs that will be executed *before* deployment
+      deployment_nonce = start_nonce + system_txs.size
+
+      system_txs << FacetTransaction.l1_block_implementation_deployment_tx(new_facet_block)
+      system_txs << FacetTransaction.l1_block_proxy_upgrade_tx(new_facet_block, deployment_nonce)
+    end
+    
+    if new_facet_block.number == SysConfig.bluebird_fork_block_number
+      check_failed_system_txs(SysConfig.bluebird_fork_block_number - 1, "Bluebird fork block")
     end
     
     transactions_with_attributes = system_txs + transactions
@@ -254,6 +256,7 @@ module GethDriver
       "--nocompaction",
       "--rollup.enabletxpooladmission=false",
       "--rollup.disabletxpoolgossip",
+      "--override.bluebird", SysConfig.bluebird_fork_time_stamp.to_s,
       "console"
     ].join(' ')
 
@@ -299,5 +302,22 @@ module GethDriver
       debug: true,
       tracer: "callTracer"
     }])
+  end
+
+  def check_failed_system_txs(block_to_check, context)
+    receipts = EthRpcClient.l2.get_block_receipts(block_to_check)
+    
+    failed_system_txs = receipts.select do |receipt|
+      FacetTransaction::SYSTEM_ADDRESS == Address20.from_hex(receipt['from']) &&
+      receipt['status'] != '0x1'
+    end
+
+    unless failed_system_txs.empty?
+      failed_system_txs.each do |tx|
+        trace = EthRpcClient.l2.trace_transaction(tx['transactionHash'])
+        ap trace
+      end
+      raise "#{context} system transactions did not execute successfully"
+    end
   end
 end

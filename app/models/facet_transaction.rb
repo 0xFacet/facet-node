@@ -3,9 +3,9 @@ class FacetTransaction < T::Struct
   include AttrAssignable
 
   prop :chain_id, T.nilable(Integer)
-  prop :l1_data_gas_used, T.nilable(Integer)
   prop :contract_initiated, T.nilable(T::Boolean)
   prop :eth_transaction_hash, T.nilable(Hash32)
+  prop :eth_transaction_input, T.nilable(ByteString)
   prop :eth_call_index, T.nilable(Integer)
   prop :block_hash, T.nilable(Hash32)
   prop :block_number, T.nilable(Integer)
@@ -27,7 +27,6 @@ class FacetTransaction < T::Struct
   class InvalidRlpInt < StandardError; end
   
   FACET_TX_TYPE = 0x46
-  DEPOSIT_TX_TYPE = 0x7E
   
   USER_DEPOSIT_SOURCE_DOMAIN = 0
   L1_INFO_DEPOSIT_SOURCE_DOMAIN = 1
@@ -36,33 +35,7 @@ class FacetTransaction < T::Struct
   SYSTEM_ADDRESS = Address20.from_hex("0xdeaddeaddeaddeaddeaddeaddeaddeaddead0001")
   L1_INFO_ADDRESS = Address20.from_hex("0x4200000000000000000000000000000000000015")
   MIGRATION_MANAGER_ADDRESS = Address20.from_hex("0x22220000000000000000000000000000000000d6")
-  
-  def self.from_ethscription(ethscription)
-    tx = new
-    tx.ethscription = ethscription
-    tx.chain_id = ChainIdManager.current_l2_chain_id
-    tx.to_address = ethscription.facet_tx_to
-    tx.value = 0
-    tx.input = ethscription.facet_tx_input
-    
-    tx.eth_transaction_hash = ethscription.transaction_hash
-    tx.from_address = ethscription.creator
-    
-    tx.contract_initiated = ethscription.contract_initiated
-    
-    payload = [
-      ethscription.block_hash.to_bin,
-      ethscription.transaction_hash.to_bin,
-      Eth::Util.zpad_int(0, 32)
-    ].join
-    
-    tx.source_hash = FacetTransaction.compute_source_hash(
-      ByteString.from_bin(payload),
-      USER_DEPOSIT_SOURCE_DOMAIN
-    )
-    
-    tx
-  end
+  PROXY_ADMIN_ADDRESS = Address20.from_hex("0x4200000000000000000000000000000000000018")
   
   sig { params(tx_count_in_block: Integer).returns(Integer) }
   def assign_gas_limit_from_tx_count_in_block(tx_count_in_block)
@@ -70,15 +43,21 @@ class FacetTransaction < T::Struct
     self.gas_limit = block_gas_limit / (tx_count_in_block + 1) # Attributes tx
   end
   
-  sig { params(hex_string: ByteString, contract_initiated: T::Boolean).returns(Integer) }
-  def self.calculate_data_gas_used(hex_string, contract_initiated:)
-    bytes = hex_string.to_bin
+  sig { params(facet_block_number: Integer).returns(Integer) }
+  def l1_data_gas_used(facet_block_number)
+    bytes = eth_transaction_input.to_bin
+
+    # Contract-initiated txs use the old 8-gas-per-byte rule regardless of fork
+    return bytes.bytesize * 8 if contract_initiated
+
     zero_count = bytes.count("\x00")
     non_zero_count = bytes.bytesize - zero_count
-    
-    if contract_initiated
-      bytes.bytesize * 8
+
+    if SysConfig.is_bluebird?(facet_block_number)
+      # EIP-7623 floor pricing: 10 gas per zero byte, 40 gas per non-zero byte
+      zero_count * 10 + non_zero_count * 40
     else
+      # Pre-Bluebird 4/16 pricing
       zero_count * 4 + non_zero_count * 16
     end
   end
@@ -86,18 +65,16 @@ class FacetTransaction < T::Struct
   sig { params(
     contract_initiated: T::Boolean,
     from_address: Address20,
-    input: ByteString,
-    tx_hash: Hash32,
-    block_hash: Hash32
+    eth_transaction_input: ByteString,
+    tx_hash: Hash32
   ).returns(T.nilable(FacetTransaction)) }
   def self.from_payload(
     contract_initiated:,
     from_address:,
-    input:,
-    tx_hash:,
-    block_hash:
+    eth_transaction_input:,
+    tx_hash:
   )
-    hex = input.to_hex
+    hex = eth_transaction_input.to_hex
     
     hex = Eth::Util.remove_hex_prefix hex
     type = hex[0, 2]
@@ -138,6 +115,8 @@ class FacetTransaction < T::Struct
     data = ByteString.from_bin(tx[4])
 
     tx = new
+    tx.eth_transaction_input = eth_transaction_input
+    
     tx.chain_id = clamp_uint(chain_id, 256)
     tx.to_address = to
     tx.value = clamp_uint(value, 256)
@@ -149,78 +128,11 @@ class FacetTransaction < T::Struct
     
     tx.contract_initiated = contract_initiated
     
-    tx.l1_data_gas_used = calculate_data_gas_used(
-      input,
-      contract_initiated: tx.contract_initiated
-    )
-    
     tx.source_hash = tx_hash
     
     tx
   rescue *tx_decode_errors, InvalidAddress, InvalidRlpInt => e
     nil
-  end
-  
-  def self.l1_attributes_tx_from_blocks(facet_block)
-    calldata = L1AttributesTxCalldata.build(
-      timestamp: facet_block.eth_block_timestamp,
-      number: facet_block.eth_block_number,
-      base_fee: facet_block.eth_block_base_fee_per_gas,
-      hash: facet_block.eth_block_hash,
-      sequence_number: facet_block.sequence_number,
-      fct_mint_rate: facet_block.fct_mint_rate,
-      fct_mint_period_l1_data_gas: facet_block.fct_mint_period_l1_data_gas
-    )
-    
-    tx = new
-    tx.chain_id = ChainIdManager.current_l2_chain_id
-    tx.to_address = L1_INFO_ADDRESS
-    tx.value = 0
-    tx.mint = 0
-    tx.gas_limit = 1_000_000
-    tx.input = calldata
-    tx.from_address = SYSTEM_ADDRESS
-    
-    tx.facet_block = facet_block
-    
-    payload = [
-      facet_block.eth_block_hash.to_bin,
-      Eth::Util.zpad_int(facet_block.sequence_number, 32)
-    ].join
-    
-    tx.source_hash = FacetTransaction.compute_source_hash(
-      ByteString.from_bin(payload),
-      L1_INFO_DEPOSIT_SOURCE_DOMAIN
-    )
-    
-    tx
-  end
-  
-  def self.v1_to_v2_migration_tx_from_block(facet_block, batch_number:)
-    unless SysConfig.is_first_v2_block?(facet_block)
-      raise "Invalid block number #{facet_block.number}!"
-    end
-    
-    function_selector = ByteString.from_bin(Eth::Util.keccak256('executeMigration()').first(4))
-    upgrade_intent = "emit events required to complete v1 to v2 migration batch ##{batch_number}"
-
-    tx = new
-    tx.chain_id = ChainIdManager.current_l2_chain_id
-    tx.to_address = MIGRATION_MANAGER_ADDRESS
-    tx.value = 0
-    tx.mint = 0
-    tx.gas_limit = 10_000_000
-    tx.input = function_selector
-    tx.from_address = SYSTEM_ADDRESS
-    
-    tx.facet_block = facet_block
-    
-    tx.source_hash = FacetTransaction.compute_source_hash(
-      ByteString.from_bin(Eth::Util.keccak256(upgrade_intent)),
-      L1_INFO_DEPOSIT_SOURCE_DOMAIN
-    )
-    
-    tx
   end
   
   sig { params(payload: ByteString, source_domain: Integer).returns(Hash32) }
@@ -246,7 +158,7 @@ class FacetTransaction < T::Struct
     tx_data.push(input.to_bin)
     tx_encoded = Eth::Rlp.encode(tx_data)
 
-    tx_type = Eth::Util.serialize_int_to_big_endian(DEPOSIT_TX_TYPE)
+    tx_type = Eth::Util.serialize_int_to_big_endian(deposit_tx_type)
     ByteString.from_bin("#{tx_type}#{tx_encoded}")
   end
   
@@ -283,5 +195,17 @@ class FacetTransaction < T::Struct
     end
     
     Eth::Util.deserialize_big_endian_to_int(bytes)
+  end
+  
+  def deposit_tx_type
+    unless facet_block.present?
+      raise "Facet block is required to determine deposit tx type"
+    end
+    
+    if SysConfig.is_bluebird?(facet_block.number)
+      0x7D
+    else
+      0x7E
+    end
   end
 end

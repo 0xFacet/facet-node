@@ -1,12 +1,11 @@
 module SysConfig
   extend self
   
-  FACET_INBOX_ADDRESS = Address20.from_hex("0x00000000000000000000000000000000000face7")
   L2_BLOCK_GAS_LIMIT = Integer(ENV.fetch('L2_BLOCK_GAS_LIMIT', 200_000_000))
   L2_BLOCK_TIME = 12
   
   def block_gas_limit(block)
-    if is_first_v2_block?(block)
+    if block.number == 1
       migration_gas + L2_BLOCK_GAS_LIMIT
     else
       L2_BLOCK_GAS_LIMIT
@@ -33,11 +32,60 @@ module SysConfig
     @_genesis_timestamp ||= EthRpcClient.l1.get_block(l1_genesis_block_number)["timestamp"].to_i(16)
   end
   
-  def is_first_v2_block?(block)
-    block.number == 1
+  def bluebird_fork_block_number
+    fork_time = bluebird_fork_time_stamp
+    delta = fork_time - genesis_timestamp
+    raise ArgumentError, "Bluebird fork timestamp (#{fork_time}) must be greater than genesis timestamp (#{genesis_timestamp})" if delta.negative?
+
+    unless (delta % L2_BLOCK_TIME).zero?
+      raise ArgumentError, "Bluebird fork timestamp (#{fork_time}) must align with L2 block time of #{L2_BLOCK_TIME} seconds"
+    end
+
+    block_num = delta / L2_BLOCK_TIME
+
+    # 10 000-multiple guard applies only to the "scheduled" path
+    unless block_num.multiple_of?(10_000) || allow_unsafe_bluebird_fork_block_number?
+      raise ArgumentError, "Bluebird fork block number (#{block_num}) must be a multiple of 10,000"
+    end
+
+    block_num
   end
   
-  def is_second_v2_block?(block)
-    block.number == 2
+  def timestamp_from_block_number(block_number)
+    genesis_timestamp + (Integer(block_number) * L2_BLOCK_TIME)
+  end
+  
+  def bluebird_fork_time_stamp
+    if ENV['BLUEBIRD_TIMESTAMP'].present?
+      ts = Integer(ENV['BLUEBIRD_TIMESTAMP'])
+      
+      if ts == 0
+        SysConfig.timestamp_from_block_number(2)
+      else
+        ts
+      end
+    elsif ENV['BLUEBIRD_L2_BLOCK'].present?
+      SysConfig.timestamp_from_block_number(ENV['BLUEBIRD_L2_BLOCK'])
+    else
+      raise "BLUEBIRD_TIMESTAMP or BLUEBIRD_L2_BLOCK must be set"
+    end
+  end
+  
+  def bluebird_immediate_fork?
+    bluebird_fork_time_stamp == SysConfig.timestamp_from_block_number(2)
+  end
+  
+  def allow_unsafe_bluebird_fork_block_number?
+    bluebird_immediate_fork? || ENV['ALLOW_UNSAFE_BLUEBIRD_FORK_BLOCK_NUMBER'] == 'true'
+  end
+  
+  def is_bluebird_fork_block?(block)
+    block.number == bluebird_fork_block_number
+  end
+  
+  def is_bluebird?(block)
+    number = block.is_a?(Integer) ? block : block.number
+    
+    number >= bluebird_fork_block_number
   end
 end
