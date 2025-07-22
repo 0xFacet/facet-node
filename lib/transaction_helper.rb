@@ -80,10 +80,6 @@ module TransactionHelper
 
     function_obj = contract.parent.function_hash[function] || proxy_contract.parent.function_hash[function]
     function_obj.get_call_data(*args).freeze
-  rescue NoMethodError => e
-    raise if Ethscription.validate_import?
-    Rails.logger.warn("No method #{function} on contract #{contract.name}")
-    "0x"
   end
   memoize :get_function_calldata
   

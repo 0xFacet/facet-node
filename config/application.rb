@@ -20,8 +20,8 @@ module SimpleVm
     
     additional_paths = %w(
       lib
-      lib/solidity
       lib/extensions
+      spec/support
     ).map{|i| Rails.root.join(i)}
     config.autoload_paths += additional_paths
     config.eager_load_paths += additional_paths

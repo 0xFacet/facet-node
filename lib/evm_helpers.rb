@@ -3,6 +3,10 @@ module EVMHelpers
   include Memery
 
   def get_contract(contract_path, address)
+    if contract_path.respond_to?(:parent) && contract_path.parent.is_a?(Eth::Contract)
+      return contract_path
+    end
+    
     contract_name = contract_path.split('/').last
     contract_file = Rails.root.join('contracts', 'src', "#{contract_path}.sol")
     contract_compiled = SolidityCompiler.compile(contract_file)

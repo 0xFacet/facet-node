@@ -23,11 +23,15 @@ class GethClient
   end
   alias :send_command :call
 
+  sig { params(l2_block_number: Integer).returns(Hash) }
   def get_l1_attributes(l2_block_number)
     if l2_block_number > 0
-      l2_block = call("eth_getBlockByNumber", ["0x#{l2_block_number.to_s(16)}", true])
+      l2_block = EthRpcClient.l2.call("eth_getBlockByNumber", ["0x#{l2_block_number.to_s(16)}", true])
       l2_attributes_tx = l2_block['transactions'].first
-      L1AttributesTxCalldata.decode(ByteString.from_hex(l2_attributes_tx['input']))
+      L1AttributesTxCalldata.decode(
+        ByteString.from_hex(l2_attributes_tx['input']),
+        l2_block_number
+      )
     else
       l1_block = EthRpcClient.l1.get_block(SysConfig.l1_genesis_block_number)
       eth_block = EthBlock.from_rpc_result(l1_block)
@@ -37,11 +41,11 @@ class GethClient
         base_fee: eth_block.base_fee_per_gas,
         blob_base_fee: 1,
         hash: eth_block.block_hash,
-        batcher_hash: Hash32.from_bin("\x00".b * 32).to_hex,
+        batcher_hash: Hash32.from_bin("\x00".b * 32),
         sequence_number: 0,
         base_fee_scalar: 0,
         blob_base_fee_scalar: 1,
-        fct_mint_rate: FctMintCalculator::INITIAL_RATE,
+        fct_mint_rate: FctMintCalculatorOld::INITIAL_RATE,
         fct_mint_period_l1_data_gas: 0
       }.with_indifferent_access
     end
