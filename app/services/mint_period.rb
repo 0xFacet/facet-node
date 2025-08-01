@@ -4,17 +4,17 @@ class MintPeriod
   HALVING_FACTOR = 2.to_r
 
   attr_reader :fct_mint_rate, :period_minted, :total_minted, :period_start_block, 
-              :block_num, :max_supply, :target_per_period
+              :block_num, :max_supply, :current_target
 
-  sig { params(block_num: Integer, fct_mint_rate: Integer, total_minted: Integer, period_minted: Integer, period_start_block: Integer, max_supply: Integer, target_per_period: Integer).void }
-  def initialize(block_num:, fct_mint_rate:, total_minted:, period_minted:, period_start_block:, max_supply:, target_per_period:)
+  sig { params(block_num: Integer, fct_mint_rate: Integer, total_minted: Integer, period_minted: Integer, period_start_block: Integer, max_supply: Integer, current_target: Integer).void }
+  def initialize(block_num:, fct_mint_rate:, total_minted:, period_minted:, period_start_block:, max_supply:, current_target:)
     @block_num            = block_num
     @fct_mint_rate        = fct_mint_rate
     @total_minted         = total_minted
     @period_minted        = period_minted
     @period_start_block   = period_start_block
     @max_supply           = max_supply.to_r
-    @target_per_period    = target_per_period
+    @current_target       = [current_target, 1].max
   end
   
   # Consumes an ETH burn amount, returns FCT minted for this tx (Rational)
@@ -59,26 +59,6 @@ class MintPeriod
       burn = tx.l1_data_gas_used(block_num) * current_l1_base_fee
       tx.mint = consume_eth(burn).to_i
     end
-  end
-
-  def current_target
-    target = target_per_period
-    get_current_halving_level.times { target /= HALVING_FACTOR }
-    [target, 1].max.floor.to_r
-  end
-  
-  def get_current_halving_level
-    level = 0
-    threshold = max_supply / HALVING_FACTOR
-    
-    # Find how many halving thresholds we've crossed
-    while total_minted >= threshold && threshold < max_supply && total_minted < max_supply
-      level += 1
-      remaining = max_supply - threshold
-      threshold += (remaining / HALVING_FACTOR) # Add half of the remaining supply
-    end
-    
-    level
   end
 
   def supply_exhausted?

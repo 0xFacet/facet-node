@@ -35,28 +35,28 @@ module L1AttributesTxCalldata
     ]
     
     # Bluebird fork introduces extra FCT-related fields that must be packed.
-    # Layout for each 32-byte word (big-endian):
+    # New layout with all fields as uint256:
     #   word 1 (offset 160): [fct_mint_period_l1_data_gas(16B)] [fct_mint_rate(16B)]
-    #   word 2 (offset 192): [fct_period_start_block(16B)]      [fct_total_minted(16B)]
-    #   word 3 (offset 224): [fct_period_minted(16B)]           [fct_max_supply(16B)]
-    #   word 4 (offset 256): [fct_initial_target_per_period(16B)][reserved / 0(16B)]
+    #   word 2 (offset 192): [fct_total_minted(32B)]
+    #   word 3 (offset 224): [fct_period_start_block(32B)]
+    #   word 4 (offset 256): [fct_period_minted(32B)]
+    #   word 5 (offset 288): [fct_initial_target_per_period(32B)]
     if SysConfig.is_bluebird?(facet_block)
       %i[fct_total_minted fct_period_start_block fct_period_minted 
-         fct_max_supply fct_initial_target_per_period].each do |field|
+         fct_initial_target_per_period].each do |field|
         raise "#{field} required after fork" if facet_block.send(field).nil?
       end
 
-      # word 2
-      packed_data << Eth::Util.zpad_int(facet_block.fct_period_start_block, 16)
-      packed_data << Eth::Util.zpad_int(facet_block.fct_total_minted, 16)
+      # word 2 - fct_total_minted as full 32 bytes
+      packed_data << Eth::Util.zpad_int(facet_block.fct_total_minted, 32)
 
-      # word 3 (offset 224): [fct_max_supply(16B)] [fct_period_minted(16B)]
-      # Note: In storage, fctPeriodMinted is in lower 128 bits, fctMaxSupply in upper 128 bits
-      # So we pack max_supply first (upper bits), then period_minted (lower bits)
-      packed_data << Eth::Util.zpad_int(facet_block.fct_max_supply, 16)
-      packed_data << Eth::Util.zpad_int(facet_block.fct_period_minted, 16)
-      
-      # word 4 (offset 256): fct_initial_target_per_period padded to 32 bytes
+      # word 3 - fct_period_start_block as full 32 bytes
+      packed_data << Eth::Util.zpad_int(facet_block.fct_period_start_block, 32)
+
+      # word 4 - fct_period_minted as full 32 bytes
+      packed_data << Eth::Util.zpad_int(facet_block.fct_period_minted, 32)
+
+      # word 5 - fct_initial_target_per_period as full 32 bytes
       packed_data << Eth::Util.zpad_int(facet_block.fct_initial_target_per_period, 32)
     end
     
@@ -100,21 +100,21 @@ module L1AttributesTxCalldata
     # Only decode fct_total_minted if at or past fork block
     if SysConfig.is_bluebird?(facet_block_number)
       # Pre-fork: 192 bytes (after removing 4-byte selector)
-      # Post-fork: 192 + 96 = 288 bytes (4 new words: 32+32+32)
-      raise "Expected exactly 288 bytes of calldata after fork, got #{data.length}" unless data.length == 288
+      # Post-fork: 192 + 128 = 320 bytes (4 new words: 32*4)
+      raise "Expected exactly 320 bytes of calldata after fork, got #{data.length}" unless data.length == 320
       raise "Invalid data gas" unless fct_mint_period_l1_data_gas.zero?
 
-      # word 2 : offsets 192..224 (32 bytes)
-      result[:fct_period_start_block] = data[192...208].unpack1('H*').to_i(16)
-      result[:fct_total_minted]  = data[208...224].unpack1('H*').to_i(16)
+      # word 2 : offsets 192..224 (32 bytes) - fct_total_minted
+      result[:fct_total_minted] = data[192...224].unpack1('H*').to_i(16)
 
-      # word 3 : offsets 224..256 (32 bytes)
-      # Note: max_supply is in upper 128 bits, period_minted in lower 128 bits
-      result[:fct_max_supply] = data[224...240].unpack1('H*').to_i(16)
-      result[:fct_period_minted] = data[240...256].unpack1('H*').to_i(16)
-      
-      # word 4 : offsets 256..288 (32 bytes)
-      result[:fct_initial_target_per_period] = data[256...288].unpack1('H*').to_i(16)
+      # word 3 : offsets 224..256 (32 bytes) - fct_period_start_block
+      result[:fct_period_start_block] = data[224...256].unpack1('H*').to_i(16)
+
+      # word 4 : offsets 256..288 (32 bytes) - fct_period_minted
+      result[:fct_period_minted] = data[256...288].unpack1('H*').to_i(16)
+
+      # word 5 : offsets 288..320 (32 bytes) - fct_initial_target_per_period
+      result[:fct_initial_target_per_period] = data[288...320].unpack1('H*').to_i(16)
     end
 
     result.with_indifferent_access

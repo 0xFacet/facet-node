@@ -65,23 +65,25 @@ contract L1Block is ISemver, IGasToken {
     uint128 public fctMintPeriodL1DataGas;
 
     /// @notice The total FCT minted
-    uint128 public fctTotalMinted;
+    uint256 public fctTotalMinted;
     
     /// @notice First L2 block number of the current mint period
-    uint128 public fctPeriodStartBlock;
+    uint256 public fctPeriodStartBlock;
 
     /// @notice Amount of FCT minted so far in the current period
-    uint128 public fctPeriodMinted;
-
-    /// @notice Maximum supply of FCT tokens
-    uint128 public fctMaxSupply;
+    uint256 public fctPeriodMinted;
 
     /// @notice Initial target FCT to mint per period
-    uint128 public fctInitialTargetPerPeriod;
+    uint256 public fctInitialTargetPerPeriod;
 
     /// @custom:semver 1.5.0-beta.0
     function version() public pure virtual returns (string memory) {
         return "1.5.0-beta.0";
+    }
+
+    /// @notice Returns the maximum supply of FCT tokens
+    function fctMaxSupply() public pure returns (uint256) {
+        return 1_500_000_000 ether;
     }
 
     /// @notice Returns the gas paying token, its decimals, name and symbol.
@@ -121,13 +123,12 @@ contract L1Block is ISemver, IGasToken {
     ///   7. _blobBaseFee        L1 blob base fee.
     ///   8. _hash               L1 blockhash.
     ///   9. _batcherHash        Versioned hash to authenticate batcher by.
-    ///  10. _fctMintRate         Current FCT mint rate.
-    ///  11. _fctMintPeriodL1DataGas  Cumulative L1 data gas used in the current mint period.
-    ///  12. _fctTotalMinted      Total FCT minted so far.
-    ///  13. _fctPeriodStartBlock First L2 block number of the current mint period.
-    ///  14. _fctPeriodMinted     Amount of FCT minted so far in the current period.
-    ///  15. _fctInitialTargetPerPeriod  Initial target FCT to mint per period.
-    ///  16. _fctMaxSupply        Maximum supply of FCT tokens.
+    ///  10. _fctMintRate         Current FCT mint rate (uint128, packed with next).
+    ///  11. _fctMintPeriodL1DataGas  Cumulative L1 data gas used in the current mint period (uint128).
+    ///  12. _fctTotalMinted      Total FCT minted so far (uint256).
+    ///  13. _fctPeriodStartBlock First L2 block number of the current mint period (uint256).
+    ///  14. _fctPeriodMinted     Amount of FCT minted so far in the current period (uint256).
+    ///  15. _fctInitialTargetPerPeriod  Initial target FCT to mint per period (uint256).
     function setL1BlockValuesEcotone() external {
         address depositor = DEPOSITOR_ACCOUNT();
         assembly {
@@ -146,22 +147,23 @@ contract L1Block is ISemver, IGasToken {
             sstore(batcherHash.slot, calldataload(132)) // bytes32
             // fctMintRate (uint128) and fctMintPeriodL1DataGas (uint128)
             sstore(fctMintRate.slot, calldataload(164))
-            // fctTotalMinted (uint128) and fctPeriodStartBlock (uint128)
+            // fctTotalMinted (uint256) - full slot
             sstore(fctTotalMinted.slot, calldataload(196))
-            // fctPeriodMinted (uint128) and fctMaxSupply (uint128)
-            sstore(fctPeriodMinted.slot, calldataload(228))
-            // fctInitialTargetPerPeriod (uint128)
-            sstore(fctInitialTargetPerPeriod.slot, calldataload(260))
+            // fctPeriodStartBlock (uint256) - full slot
+            sstore(fctPeriodStartBlock.slot, calldataload(228))
+            // fctPeriodMinted (uint256) - full slot
+            sstore(fctPeriodMinted.slot, calldataload(260))
+            // fctInitialTargetPerPeriod (uint256) - full slot
+            sstore(fctInitialTargetPerPeriod.slot, calldataload(292))
         }
     }
     
     struct FctDetails {
         uint128 mintRate;
-        uint128 totalMinted;
-        uint128 periodStartBlock;
-        uint128 periodMinted;
-        uint128 maxSupply;
-        uint128 initialTargetPerPeriod;
+        uint256 totalMinted;
+        uint256 periodStartBlock;
+        uint256 periodMinted;
+        uint256 initialTargetPerPeriod;
         uint256 targetNumBlocksInHalving;
         uint256 expectedTotalMinted;
         int256 pacingDelta;
@@ -173,7 +175,6 @@ contract L1Block is ISemver, IGasToken {
             totalMinted: fctTotalMinted,
             periodStartBlock: fctPeriodStartBlock,
             periodMinted: fctPeriodMinted,
-            maxSupply: fctMaxSupply,
             initialTargetPerPeriod: fctInitialTargetPerPeriod,
             targetNumBlocksInHalving: targetNumBlocksInHalving(),
             expectedTotalMinted: targetTotalMinted(),
@@ -188,15 +189,16 @@ contract L1Block is ISemver, IGasToken {
     /// @notice Returns the approximate expected total minted at current block based on linear schedule
     /// @return Expected total minted amount in wei
     function targetTotalMinted() public view returns (uint256) {
-        uint256 supplyTargetFirstHalving = fctMaxSupply / 2;
+        uint256 supplyTargetFirstHalving = fctMaxSupply() / 2;
         return (supplyTargetFirstHalving * block.number) / targetNumBlocksInHalving();
     }
     
     /// @notice Returns approximate pacing delta: positive if ahead of schedule, negative if behind
     /// @return Pacing delta as a percentage (e.g., 0.05e18 = 5% ahead)
     function pacingDelta() public view returns (int256) {
-        uint256 ratio = (fctTotalMinted * 1e18) / targetTotalMinted();
-        int256 delta = int256(ratio) - 1e18;
-        return delta; 
+        uint256 expected = targetTotalMinted();
+        if (expected == 0) return 0;
+        uint256 ratio = (fctTotalMinted * 1e18) / expected;
+        return int256(ratio) - 1e18;
     }
 }
