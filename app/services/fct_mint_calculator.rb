@@ -35,36 +35,6 @@ module FctMintCalculator
     total_periods = TARGET_NUM_BLOCKS_IN_HALVING / ADJUSTMENT_PERIOD_TARGET_LENGTH
     (supply_target_first_halving / total_periods).to_i
   end
-  
-  # Get halving level based on total minted
-  sig { params(total_minted: Integer).returns(Integer) }
-  def get_halving_level(total_minted)
-    return 0 if total_minted >= max_supply
-    
-    level = 0
-    threshold = max_supply / 2
-    
-    while total_minted > threshold
-      level += 1
-      remaining = max_supply - threshold
-      threshold += (remaining / 2)
-    end
-    
-    level
-  end
-  
-  # Calculate the target for the current period based on halving level
-  sig { params(halving_level: Integer, stored_target: T.nilable(Integer)).returns(Integer) }
-  def calculate_current_period_target(halving_level, stored_target)
-    if halving_level == 0
-      # First halving period - use the stored target (accounts for midstream fork)
-      stored_target
-    else
-      # Subsequent halvings - use idealized target divided by 2^halving_level
-      idealized = idealized_initial_target_per_period
-      (idealized.to_r / (2 ** halving_level.to_r)).to_i
-    end
-  end
 
   # Remaining-supply / remaining-periods calculation
   sig { params(total_minted: Integer, current_block_num: Integer).returns(Integer) }
@@ -154,13 +124,8 @@ module FctMintCalculator
       period_minted = prev_attrs.fetch(:fct_period_minted)
       fct_mint_rate = prev_attrs.fetch(:fct_mint_rate)
       
-      # Get the halving level for the total minted
-      current_halving_level = get_halving_level(total_minted)
-      
-      # Always calculate what the target should be for this halving level
-      # This ensures consistency after halvings
-      stored_target = prev_attrs.fetch(:fct_initial_target_per_period)
-      initial_target_value = calculate_current_period_target(current_halving_level, stored_target)
+      # Use stored target (MintPeriod will handle halving)
+      initial_target_value = prev_attrs.fetch(:fct_initial_target_per_period)
     end
     
     engine = MintPeriod.new(
@@ -170,7 +135,7 @@ module FctMintCalculator
       period_minted: period_minted,
       period_start_block: period_start_block,
       max_supply: max_supply,
-      current_target: initial_target_value
+      target_per_period: initial_target_value
     )
 
     engine.assign_mint_amounts(facet_txs, current_l1_base_fee)

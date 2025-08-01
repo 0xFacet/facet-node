@@ -90,7 +90,7 @@ module FctMintCalculatorAlbatross
       period_minted: 0, # Albatross doesn't track period minted
       period_start_block: facet_block.number, # Albatross doesn't track period start
       max_supply: 0, # Not used in Albatross
-      current_target: 0 # Not used in Albatross
+      target_per_period: 0 # Not used in Albatross
     )
   end
 end

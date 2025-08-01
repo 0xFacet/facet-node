@@ -81,11 +81,6 @@ contract L1Block is ISemver, IGasToken {
         return "1.5.0-beta.0";
     }
 
-    /// @notice Returns the maximum supply of FCT tokens
-    function fctMaxSupply() public pure returns (uint256) {
-        return 1_500_000_000 ether;
-    }
-
     /// @notice Returns the gas paying token, its decimals, name and symbol.
     ///         If nothing is set in state, then it means ether is used.
     function gasPayingToken() public view returns (address addr_, uint8 decimals_) {
@@ -158,47 +153,34 @@ contract L1Block is ISemver, IGasToken {
         }
     }
     
+    /// @notice Returns the maximum supply of FCT tokens
+    function fctMaxSupply() public pure returns (uint256) {
+        return 1_500_000_000 ether;
+    }
+    
+    function targetNumBlocksInHalving() public pure returns (uint256) {
+        return 2_628_000;
+    }
+    
     struct FctDetails {
+        uint256 maxSupply;
         uint128 mintRate;
         uint256 totalMinted;
         uint256 periodStartBlock;
         uint256 periodMinted;
         uint256 initialTargetPerPeriod;
         uint256 targetNumBlocksInHalving;
-        uint256 expectedTotalMinted;
-        int256 pacingDelta;
     }
     
     function fctDetails() external view returns (FctDetails memory) {
         return FctDetails({
+            maxSupply: fctMaxSupply(),
             mintRate: fctMintRate,
             totalMinted: fctTotalMinted,
             periodStartBlock: fctPeriodStartBlock,
             periodMinted: fctPeriodMinted,
             initialTargetPerPeriod: fctInitialTargetPerPeriod,
-            targetNumBlocksInHalving: targetNumBlocksInHalving(),
-            expectedTotalMinted: targetTotalMinted(),
-            pacingDelta: pacingDelta()
+            targetNumBlocksInHalving: targetNumBlocksInHalving()
         });
-    }
-
-    function targetNumBlocksInHalving() public pure returns (uint256) {
-        return 2_628_000;
-    }
-    
-    /// @notice Returns the approximate expected total minted at current block based on linear schedule
-    /// @return Expected total minted amount in wei
-    function targetTotalMinted() public view returns (uint256) {
-        uint256 supplyTargetFirstHalving = fctMaxSupply() / 2;
-        return (supplyTargetFirstHalving * block.number) / targetNumBlocksInHalving();
-    }
-    
-    /// @notice Returns approximate pacing delta: positive if ahead of schedule, negative if behind
-    /// @return Pacing delta as a percentage (e.g., 0.05e18 = 5% ahead)
-    function pacingDelta() public view returns (int256) {
-        uint256 expected = targetTotalMinted();
-        if (expected == 0) return 0;
-        uint256 ratio = (fctTotalMinted * 1e18) / expected;
-        return int256(ratio) - 1e18;
     }
 }
