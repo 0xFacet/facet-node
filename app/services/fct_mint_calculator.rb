@@ -53,7 +53,6 @@ module FctMintCalculator
     [idealized_initial_target_per_period, dynamic_target].max
   end
   
-  
   sig { params(block_number: Integer).returns(Integer) }
   def calculate_historical_total(block_number)
     # Only used for the fork block calculation. The fork block will be the first block in a new period.
@@ -114,7 +113,7 @@ module FctMintCalculator
       ).to_i
       
       # Compute initial target based on historical total and current block
-      initial_target_value = compute_target_per_period_at_bluebird_fork(
+      bluebird_fork_per_period_target = compute_target_per_period_at_bluebird_fork(
         total_minted,
         current_block_num
       )
@@ -125,7 +124,7 @@ module FctMintCalculator
       fct_mint_rate = prev_attrs.fetch(:fct_mint_rate)
       
       # Use stored target (MintPeriod will handle halving)
-      initial_target_value = prev_attrs.fetch(:fct_initial_target_per_period)
+      bluebird_fork_per_period_target = prev_attrs.fetch(:fct_bluebird_fork_per_period_target)
     end
     
     engine = MintPeriod.new(
@@ -135,7 +134,7 @@ module FctMintCalculator
       period_minted: period_minted,
       period_start_block: period_start_block,
       max_supply: max_supply,
-      target_per_period: initial_target_value
+      bluebird_fork_per_period_target: bluebird_fork_per_period_target
     )
 
     engine.assign_mint_amounts(facet_txs, current_l1_base_fee)
@@ -145,7 +144,7 @@ module FctMintCalculator
       fct_mint_rate:         engine.fct_mint_rate.to_i,
       fct_period_start_block: engine.period_start_block,
       fct_period_minted:     engine.period_minted.to_i,
-      fct_initial_target_per_period: initial_target_value
+      fct_bluebird_fork_per_period_target: bluebird_fork_per_period_target
     )
 
     engine

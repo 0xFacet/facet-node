@@ -74,7 +74,7 @@ contract L1Block is ISemver, IGasToken {
     uint256 public fctPeriodMinted;
 
     /// @notice Initial target FCT to mint per period
-    uint256 public fctInitialTargetPerPeriod;
+    uint256 public fctBluebirdForkPerPeriodTarget;
 
     /// @custom:semver 1.5.0-beta.0
     function version() public pure virtual returns (string memory) {
@@ -148,8 +148,8 @@ contract L1Block is ISemver, IGasToken {
             sstore(fctPeriodStartBlock.slot, calldataload(228))
             // fctPeriodMinted (uint256) - full slot
             sstore(fctPeriodMinted.slot, calldataload(260))
-            // fctInitialTargetPerPeriod (uint256) - full slot
-            sstore(fctInitialTargetPerPeriod.slot, calldataload(292))
+            // fctBluebirdForkPerPeriodTarget (uint256) - full slot
+            sstore(fctBluebirdForkPerPeriodTarget.slot, calldataload(292))
         }
     }
     
@@ -168,7 +168,7 @@ contract L1Block is ISemver, IGasToken {
         uint256 totalMinted;
         uint256 periodStartBlock;
         uint256 periodMinted;
-        uint256 initialTargetPerPeriod;
+        uint256 bluebirdForkPerPeriodTarget;
         uint256 targetNumBlocksInHalving;
     }
     
@@ -179,7 +179,7 @@ contract L1Block is ISemver, IGasToken {
             totalMinted: fctTotalMinted,
             periodStartBlock: fctPeriodStartBlock,
             periodMinted: fctPeriodMinted,
-            initialTargetPerPeriod: fctInitialTargetPerPeriod,
+            bluebirdForkPerPeriodTarget: fctBluebirdForkPerPeriodTarget,
             targetNumBlocksInHalving: targetNumBlocksInHalving()
         });
     }

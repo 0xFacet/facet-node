@@ -40,10 +40,10 @@ module L1AttributesTxCalldata
     #   word 2 (offset 192): [fct_total_minted(32B)]
     #   word 3 (offset 224): [fct_period_start_block(32B)]
     #   word 4 (offset 256): [fct_period_minted(32B)]
-    #   word 5 (offset 288): [fct_initial_target_per_period(32B)]
+    #   word 5 (offset 288): [fct_bluebird_fork_per_period_target(32B)]
     if SysConfig.is_bluebird?(facet_block)
       %i[fct_total_minted fct_period_start_block fct_period_minted 
-         fct_initial_target_per_period].each do |field|
+         fct_bluebird_fork_per_period_target].each do |field|
         raise "#{field} required after fork" if facet_block.send(field).nil?
       end
 
@@ -56,8 +56,8 @@ module L1AttributesTxCalldata
       # word 4 - fct_period_minted as full 32 bytes
       packed_data << Eth::Util.zpad_int(facet_block.fct_period_minted, 32)
 
-      # word 5 - fct_initial_target_per_period as full 32 bytes
-      packed_data << Eth::Util.zpad_int(facet_block.fct_initial_target_per_period, 32)
+      # word 5 - fct_bluebird_fork_per_period_target as full 32 bytes
+      packed_data << Eth::Util.zpad_int(facet_block.fct_bluebird_fork_per_period_target, 32)
     end
     
     ByteString.from_bin(packed_data.join)
@@ -113,8 +113,8 @@ module L1AttributesTxCalldata
       # word 4 : offsets 256..288 (32 bytes) - fct_period_minted
       result[:fct_period_minted] = data[256...288].unpack1('H*').to_i(16)
 
-      # word 5 : offsets 288..320 (32 bytes) - fct_initial_target_per_period
-      result[:fct_initial_target_per_period] = data[288...320].unpack1('H*').to_i(16)
+      # word 5 : offsets 288..320 (32 bytes) - fct_bluebird_fork_per_period_target
+      result[:fct_bluebird_fork_per_period_target] = data[288...320].unpack1('H*').to_i(16)
     end
 
     result.with_indifferent_access

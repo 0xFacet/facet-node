@@ -4,17 +4,17 @@ class MintPeriod
   HALVING_FACTOR = 2.to_r
 
   attr_reader :fct_mint_rate, :period_minted, :total_minted, :period_start_block, 
-              :block_num, :max_supply, :target_per_period
+              :block_num, :max_supply, :bluebird_fork_per_period_target
 
-  sig { params(block_num: Integer, fct_mint_rate: Integer, total_minted: Integer, period_minted: Integer, period_start_block: Integer, max_supply: Integer, target_per_period: Integer).void }
-  def initialize(block_num:, fct_mint_rate:, total_minted:, period_minted:, period_start_block:, max_supply:, target_per_period:)
+  sig { params(block_num: Integer, fct_mint_rate: Integer, total_minted: Integer, period_minted: Integer, period_start_block: Integer, max_supply: Integer, bluebird_fork_per_period_target: Integer).void }
+  def initialize(block_num:, fct_mint_rate:, total_minted:, period_minted:, period_start_block:, max_supply:, bluebird_fork_per_period_target:)
     @block_num            = block_num
     @fct_mint_rate        = fct_mint_rate
     @total_minted         = total_minted
     @period_minted        = period_minted
     @period_start_block   = period_start_block
     @max_supply           = max_supply.to_r
-    @target_per_period    = target_per_period
+    @bluebird_fork_per_period_target    = bluebird_fork_per_period_target
   end
   
   # Consumes an ETH burn amount, returns FCT minted for this tx (Rational)
@@ -62,8 +62,14 @@ class MintPeriod
   end
 
   def current_target
-    target = target_per_period
-    get_current_halving_level.times { target /= HALVING_FACTOR }
+    halving_level = get_current_halving_level
+    
+    if halving_level == 0
+      return bluebird_fork_per_period_target
+    end
+    
+    target = FctMintCalculator.idealized_initial_target_per_period
+    halving_level.times { target /= HALVING_FACTOR }
     [target, 1].max.floor.to_r
   end
   

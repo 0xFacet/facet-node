@@ -15,6 +15,7 @@ RSpec.describe "L1Block end-to-end" do
   let(:fct_total_minted) { 9_876 }
   let(:fct_period_start_block) { 5 }
   let(:fct_period_minted) { 321 }
+  let(:fct_max_supply) { 622_222_222 }
   let(:fct_initial_target_per_period) { 29_595 }
 
   # Build a synthetic FacetBlock that is post-Bluebird fork so that
@@ -32,7 +33,8 @@ RSpec.describe "L1Block end-to-end" do
       fct_period_start_block: fct_period_start_block,
       fct_period_minted: fct_period_minted,
       fct_mint_period_l1_data_gas: nil,
-      fct_initial_target_per_period: fct_initial_target_per_period
+      fct_max_supply: nil, # Not used anymore, max_supply is a constant
+      fct_bluebird_fork_per_period_target: fct_initial_target_per_period
     )
   end
 
@@ -70,7 +72,7 @@ RSpec.describe "L1Block end-to-end" do
     period_start = make_static_call(contract: l1_block_address, function_name: "fctPeriodStartBlock")
     period_minted = make_static_call(contract: l1_block_address, function_name: "fctPeriodMinted")
     max_supply   = make_static_call(contract: l1_block_address, function_name: "fctMaxSupply")
-    initial_target = make_static_call(contract: l1_block_address, function_name: "fctInitialTargetPerPeriod")
+    initial_target = make_static_call(contract: l1_block_address, function_name: "fctBluebirdForkPerPeriodTarget")
 
     # Verify decoded values match contract values
     expect(seq).to eq(decoded[:sequence_number])
@@ -80,8 +82,8 @@ RSpec.describe "L1Block end-to-end" do
     expect(total_minted).to eq(decoded[:fct_total_minted])
     expect(period_start).to eq(decoded[:fct_period_start_block])
     expect(period_minted).to eq(decoded[:fct_period_minted])
-    expect(max_supply).to eq(1_500_000_000.ether)
-    expect(initial_target).to eq(decoded[:fct_initial_target_per_period])
+    # fct_max_supply is not in decoded data since it's a constant
+    expect(initial_target).to eq(decoded[:fct_bluebird_fork_per_period_target])
     
     # Verify contract values match original input values
     expect(seq).to eq(sequence_number)
@@ -91,7 +93,7 @@ RSpec.describe "L1Block end-to-end" do
     expect(total_minted).to eq(fct_total_minted)
     expect(period_start).to eq(fct_period_start_block)
     expect(period_minted).to eq(fct_period_minted)
-    expect(max_supply).to eq(1_500_000_000.ether)
+    expect(max_supply).to eq(FctMintCalculator.max_supply) # Now a constant
     expect(initial_target).to eq(fct_initial_target_per_period)
     
     # Verify decoded values match original input values
@@ -102,8 +104,8 @@ RSpec.describe "L1Block end-to-end" do
     expect(decoded[:fct_total_minted]).to eq(fct_total_minted)
     expect(decoded[:fct_period_start_block]).to eq(fct_period_start_block)
     expect(decoded[:fct_period_minted]).to eq(fct_period_minted)
-    # fct_max_supply no longer in calldata
-    expect(decoded[:fct_initial_target_per_period]).to eq(fct_initial_target_per_period)
+    # fct_max_supply is not in decoded data since it's a constant
+    expect(decoded[:fct_bluebird_fork_per_period_target]).to eq(fct_initial_target_per_period)
   end
   
   it "provides correct helper function values" do
@@ -117,7 +119,8 @@ RSpec.describe "L1Block end-to-end" do
     
     # Use specific test values for helper functions
     test_l2_block = 6_500_000
-    test_fct_total_minted = 195_000_000.ether  # Convert to wei
+    test_fct_total_minted = 195_000_000
+    test_fct_max_supply = 622_222_222
     test_fct_mint_rate = 1_234
     
     facet_block = FacetBlock.new(
@@ -132,7 +135,8 @@ RSpec.describe "L1Block end-to-end" do
       fct_period_start_block: fct_period_start_block,
       fct_period_minted: fct_period_minted,
       fct_mint_period_l1_data_gas: nil,
-      fct_initial_target_per_period: fct_initial_target_per_period
+      fct_max_supply: nil, # Not used anymore, max_supply is a constant
+      fct_bluebird_fork_per_period_target: fct_initial_target_per_period
     )
     
     calldata_bs = L1AttributesTxCalldata.build(facet_block)
@@ -145,6 +149,9 @@ RSpec.describe "L1Block end-to-end" do
       gas_limit: 1_000_000
     )
     expect(tx_receipt.status).to eq(1)
+    
+    # NOTE: targetTotalMinted and pacingDelta functions were removed from the contract
+    # as they are no longer needed with the fixed supply approach
     
     # Test targetNumBlocksInHalving
     target_blocks = make_static_call(
@@ -166,11 +173,11 @@ RSpec.describe "L1Block end-to-end" do
     max_eth_block_number = max_uint64
     max_eth_block_base_fee_per_gas = max_uint256
     max_fct_mint_rate = max_uint128
-    # New fields are now uint256
-    max_fct_total_minted = max_uint256
-    max_fct_period_start_block = max_uint256
-    max_fct_period_minted = max_uint256
-    max_fct_initial_target_per_period = max_uint256
+    max_fct_total_minted = max_uint128
+    max_fct_period_start_block = max_uint128
+    max_fct_period_minted = max_uint128
+    max_fct_max_supply = max_uint128
+    max_fct_initial_target_per_period = max_uint128
     
     # Build FacetBlock with maximum values
     max_facet_block = FacetBlock.new(
@@ -185,7 +192,8 @@ RSpec.describe "L1Block end-to-end" do
       fct_period_start_block: max_fct_period_start_block,
       fct_period_minted: max_fct_period_minted,
       fct_mint_period_l1_data_gas: nil,
-      fct_initial_target_per_period: max_fct_initial_target_per_period
+      fct_max_supply: nil, # Not used anymore, max_supply is a constant
+      fct_bluebird_fork_per_period_target: max_fct_initial_target_per_period
     )
     
     # Deploy contract
@@ -220,7 +228,7 @@ RSpec.describe "L1Block end-to-end" do
     period_start = make_static_call(contract: l1_block_address, function_name: "fctPeriodStartBlock")
     period_minted = make_static_call(contract: l1_block_address, function_name: "fctPeriodMinted")
     max_supply = make_static_call(contract: l1_block_address, function_name: "fctMaxSupply")
-    initial_target = make_static_call(contract: l1_block_address, function_name: "fctInitialTargetPerPeriod")
+    initial_target = make_static_call(contract: l1_block_address, function_name: "fctBluebirdForkPerPeriodTarget")
     
     # Verify all values match
     expect(seq).to eq(max_sequence_number)
@@ -230,7 +238,7 @@ RSpec.describe "L1Block end-to-end" do
     expect(total_minted).to eq(max_fct_total_minted)
     expect(period_start).to eq(max_fct_period_start_block)
     expect(period_minted).to eq(max_fct_period_minted)
-    expect(max_supply).to eq(1_500_000_000.ether)
+    expect(max_supply).to eq(FctMintCalculator.max_supply) # Now a constant
     expect(initial_target).to eq(max_fct_initial_target_per_period)
     
     # Verify decoded values match
@@ -241,7 +249,7 @@ RSpec.describe "L1Block end-to-end" do
     expect(decoded[:fct_total_minted]).to eq(max_fct_total_minted)
     expect(decoded[:fct_period_start_block]).to eq(max_fct_period_start_block)
     expect(decoded[:fct_period_minted]).to eq(max_fct_period_minted)
-    # fct_max_supply no longer in decoded values
-    expect(decoded[:fct_initial_target_per_period]).to eq(max_fct_initial_target_per_period)
+    # fct_max_supply is not in decoded data since it's a constant
+    expect(decoded[:fct_bluebird_fork_per_period_target]).to eq(max_fct_initial_target_per_period)
   end
-end 
+end

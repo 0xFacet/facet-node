@@ -9,8 +9,8 @@ RSpec.describe MintPeriod do
         total_minted: 0,
         period_minted: 0,
         period_start_block: 1000,
-        max_supply: FctMintCalculator.max_supply,
-        current_target: 29_595
+        max_supply: 622_222_222,
+        bluebird_fork_per_period_target: 29_595
       )
     end
 
