@@ -192,11 +192,16 @@ class EthBlockImporter
       receipt_promise = Concurrent::Promise.execute do
         ethereum_client.get_transaction_receipts(block_number)
       end
-      
-      [block_number, {
-        block: block_promise,
-        receipts: receipt_promise
-      }.with_indifferent_access]
+
+      promise = Concurrent::Promise.zip(block_promise, receipt_promise).then do |block_result, receipt_result|
+        eth_block = EthBlock.from_rpc_result(block_result)
+        facet_block = FacetBlock.from_eth_block(eth_block)
+        facet_txs = EthTransaction.facet_txs_from_rpc_results(block_result, receipt_result)
+        
+        { eth_block: eth_block, facet_block: facet_block, facet_txs: facet_txs }
+      end
+
+      [block_number, promise]
     end.to_h
   end
   
@@ -265,60 +270,46 @@ class EthBlockImporter
     puts "Block Importer: importing blocks #{block_numbers.join(', ')}"
     start = Time.current
     
-    block_responses = l1_rpc_results.select do |block_number, _|
-      block_numbers.include?(block_number)
-    end.to_h.transform_values do |hsh|
-      hsh.transform_values(&:value!)
-    end
-  
-    l1_rpc_results.reject! { |block_number, _| block_responses.key?(block_number) }
-    
+    block_responses = l1_rpc_results
+      .select { |n, _| block_numbers.include?(n) }
+      .transform_values(&:value!)
+
+    l1_rpc_results.reject! { |n, _| block_responses.key?(n) }
+
     eth_blocks = []
     facet_blocks = []
     res = []
-    
-    block_numbers.each.with_index do |block_number, index|
-      block_response = block_responses[block_number]
-      
-      block_result = block_response['block']
-      receipt_result = block_response['receipts']
-      
-      parent_eth_block = eth_block_cache[block_number - 1]
-      
-      if parent_eth_block && parent_eth_block.block_hash != Hash32.from_hex(block_result['parentHash'])
+
+    block_numbers.each do |block_number|
+      response = block_responses[block_number]
+      eth_block = response[:eth_block]
+      facet_block = response[:facet_block]
+      facet_txs = response[:facet_txs]
+
+      parent_block = eth_block_cache[block_number - 1]
+      if parent_block && parent_block.block_hash != eth_block.parent_hash
         logger.info "Reorg detected at block #{block_number}"
         raise ReorgDetectedError
       end
-      
-      eth_block = EthBlock.from_rpc_result(block_result)
 
-      facet_block = FacetBlock.from_eth_block(eth_block)
-      
-      facet_txs = EthTransaction.facet_txs_from_rpc_results(block_result, receipt_result)
-      
-      facet_txs.each do |facet_tx|
-        facet_tx.facet_block = facet_block
-      end
-      
-      imported_facet_blocks = propose_facet_block(
+      facet_txs.each { |tx| tx.facet_block = facet_block }
+
+      imported = propose_facet_block(
         facet_block: facet_block,
         facet_txs: facet_txs
       )
-      
-      imported_facet_blocks.each do |facet_block|
-        facet_block_cache[facet_block.number] = facet_block
-      end
-      
+
+      imported.each { |fb| facet_block_cache[fb.number] = fb }
       eth_block_cache[eth_block.number] = eth_block
-      
+
       prune_caches
-      
-      facet_blocks.concat(imported_facet_blocks)
+
+      facet_blocks.concat(imported)
       eth_blocks << eth_block
       
       res << OpenStruct.new(
-        facet_block: imported_facet_blocks.last,
-        transactions_imported: imported_facet_blocks.last.facet_transactions.length
+        facet_block: imported.last,
+        transactions_imported: imported.last.facet_transactions.length
       )
     end
   
