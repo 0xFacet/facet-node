@@ -60,15 +60,19 @@ class MintPeriod
     [max_supply - total_minted, 0].max.floor.to_r
   end
 
-  sig { params(facet_txs: T::Array[FacetTransaction], current_l1_base_fee: Integer).void }
+  sig { params(facet_txs: T.untyped, current_l1_base_fee: Integer).void }
   def assign_mint_amounts(facet_txs, current_l1_base_fee)
     if blocks_elapsed_in_period >= FctMintCalculator::ADJUSTMENT_PERIOD_TARGET_LENGTH
       start_new_period(:adjust_up)
     end
     
     facet_txs.each do |tx|
-      burn = tx.l1_data_gas_used(block_num) * current_l1_base_fee
-      tx.mint = consume_eth(burn).to_i
+      # Only FacetTransaction objects have mint field and l1_data_gas_used
+      # StandardL2Transaction objects don't mint
+      if tx.is_a?(FacetTransaction)
+        burn = tx.l1_data_gas_used(block_num) * current_l1_base_fee
+        tx.mint = consume_eth(burn).to_i
+      end
     end
   end
 

@@ -294,7 +294,12 @@ class EthBlockImporter
 
       facet_block = FacetBlock.from_eth_block(eth_block)
       
-      facet_txs = EthTransaction.facet_txs_from_rpc_results(block_result, receipt_result)
+      # Use batch collection v2 if enabled, otherwise use v1
+      facet_txs = if SysConfig.facet_batch_v2_enabled?
+        collect_facet_transactions_v2(block_result, receipt_result)
+      else
+        EthTransaction.facet_txs_from_rpc_results(block_result, receipt_result)
+      end
       
       facet_txs.each do |facet_tx|
         facet_tx.facet_block = facet_block
@@ -374,5 +379,36 @@ class EthBlockImporter
   
   def geth_driver
     @geth_driver
+  end
+  
+  def blob_provider
+    @blob_provider ||= BlobProvider.new
+  end
+  
+  private
+  
+  # Collect Facet transactions using the v2 batch-aware system
+  def collect_facet_transactions_v2(block_result, receipt_result)
+    block_number = block_result['number'].to_i(16)
+    
+    # Use the batch collector to find all transactions
+    collector = FacetBatchCollector.new(
+      eth_block: block_result,
+      receipts: receipt_result,
+      blob_provider: blob_provider,
+      logger: logger
+    )
+    
+    collected = collector.call
+    
+    # Build the final transaction order
+    builder = FacetBlockBuilder.new(
+      collected: collected,
+      l2_block_gas_limit: SysConfig::L2_BLOCK_GAS_LIMIT,  # Use constant directly
+      get_authorized_signer: ->(block_num) { PriorityRegistry.instance.authorized_signer(block_num) },
+      logger: logger
+    )
+    
+    builder.ordered_transactions(block_number)
   end
 end

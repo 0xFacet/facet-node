@@ -21,8 +21,13 @@ RSpec.describe FctMintCalculator do
   end
 
   def build_tx(burn_tokens)
-    tx = OpenStruct.new
-    tx.define_singleton_method(:l1_data_gas_used) { |_blk_num| burn_tokens }
+    # Create a mock FacetTransaction that responds to the necessary methods
+    tx = instance_double(FacetTransaction)
+    mint_value = nil
+    allow(tx).to receive(:is_a?).with(FacetTransaction).and_return(true)
+    allow(tx).to receive(:l1_data_gas_used).and_return(burn_tokens)
+    allow(tx).to receive(:mint=) { |val| mint_value = val }
+    allow(tx).to receive(:mint) { mint_value }
     tx
   end
   

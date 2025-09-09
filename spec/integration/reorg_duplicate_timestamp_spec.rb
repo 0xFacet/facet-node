@@ -87,7 +87,7 @@ RSpec.describe 'Reorg followed by duplicate-timestamp rejection', slow: true do
     importer.instance_variable_set(:@eth_block_cache, { 0 => eth_genesis })
     importer.instance_variable_set(:@ethereum_client, double('EthRpcClient'))
     importer.instance_variable_set(:@geth_driver, GethDriver)
-    allow(importer).to receive(:logger).and_return(double('Logger', info: nil))
+    allow(importer).to receive(:logger).and_return(double('Logger', info: nil, debug: nil, error: nil, warn: nil))
     allow(importer).to receive(:current_block_number).and_return(2)
 
     # ------------------------------------------------------------------
@@ -271,7 +271,7 @@ RSpec.describe 'Reorg followed by duplicate-timestamp rejection', slow: true do
     importer.instance_variable_set(:@eth_block_cache, { 0 => eth_genesis })
     importer.instance_variable_set(:@ethereum_client, double('EthRpcClient'))
     importer.instance_variable_set(:@geth_driver, GethDriver)
-    allow(importer).to receive(:logger).and_return(double('Logger', info: nil))
+    allow(importer).to receive(:logger).and_return(double('Logger', info: nil, debug: nil, error: nil, warn: nil))
     allow(importer).to receive(:current_block_number).and_return(2)
     
     # Set up blocks

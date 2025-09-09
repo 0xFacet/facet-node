@@ -4,6 +4,22 @@ module SysConfig
   L2_BLOCK_GAS_LIMIT = Integer(ENV.fetch('L2_BLOCK_GAS_LIMIT', 200_000_000))
   L2_BLOCK_TIME = 12
   
+  # Priority share configuration
+  PRIORITY_SHARE_BPS = Integer(ENV.fetch('PRIORITY_SHARE_BPS', 8000))  # 80% default
+  
+  # Feature flags - module methods
+  def self.facet_batch_v2_enabled?
+    ENV.fetch('FACET_BATCH_V2_ENABLED', 'false').casecmp?('true')
+  end
+  
+  def self.enable_sig_verify?
+    ENV.fetch('ENABLE_SIG_VERIFY', 'false').casecmp?('true')
+  end
+  
+  def self.priority_gas_limit
+    (L2_BLOCK_GAS_LIMIT * PRIORITY_SHARE_BPS) / 10_000
+  end
+  
   def block_gas_limit(block)
     if block.number == 1
       migration_gas + L2_BLOCK_GAS_LIMIT
