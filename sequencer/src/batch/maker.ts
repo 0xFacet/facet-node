@@ -64,29 +64,26 @@ export class BatchMaker {
         return null;
       }
       
-      // Create batch record
+      // Prepare the ordered transaction hashes for JSON storage
+      const txHashesJson = JSON.stringify(
+        selected.map(tx => '0x' + tx.hash.toString('hex'))
+      );
+
+      // Create batch record with tx_hashes as JSON
       const batchResult = database.prepare(`
-        INSERT INTO batches (content_hash, wire_format, state, blob_size, gas_bid, tx_count, target_l1_block)
-        VALUES (?, ?, 'open', ?, ?, ?, ?)
+        INSERT INTO batches (content_hash, wire_format, state, blob_size, gas_bid, tx_count, target_l1_block, tx_hashes)
+        VALUES (?, ?, 'open', ?, ?, ?, ?, ?)
       `).run(
         contentHash,
         wireFormat,
         wireFormat.length,
         this.calculateGasBid().toString(),
         selected.length,
-        Number(targetL1Block)
+        Number(targetL1Block),
+        txHashesJson
       );
-      
+
       const batchId = batchResult.lastInsertRowid as number;
-      
-      // Insert batch items preserving order
-      const insertItem = database.prepare(
-        'INSERT INTO batch_items (batch_id, ord, tx_hash) VALUES (?, ?, ?)'
-      );
-      
-      selected.forEach((tx, index) => {
-        insertItem.run(batchId, index, tx.hash);
-      });
       
       // Update transaction states
       const updateTxs = database.prepare(`

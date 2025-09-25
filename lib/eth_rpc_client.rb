@@ -1,6 +1,4 @@
 class EthRpcClient
-  include Memery
-  
   class HttpError < StandardError
     attr_reader :code, :http_message
     
@@ -111,8 +109,7 @@ class EthRpcClient
   def get_block_number
     query_api(method: 'eth_blockNumber').to_i(16)
   end
-  memoize :get_block_number, ttl: 12.seconds
-
+  
   def query_api(method = nil, params = [], **kwargs)
     if kwargs.present?
       method = kwargs[:method]

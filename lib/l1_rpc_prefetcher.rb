@@ -1,7 +1,6 @@
-require 'concurrent'
-require 'retriable'
-
 class L1RpcPrefetcher
+  include Memery
+  
   def initialize(ethereum_client:,
                  ahead: ENV.fetch('L1_PREFETCH_FORWARD', Rails.env.test? ? 5 : 20).to_i,
                  threads: ENV.fetch('L1_PREFETCH_THREADS', Rails.env.test? ? 2 : 2).to_i)
@@ -187,4 +186,9 @@ class L1RpcPrefetcher
   def blob_provider
     @blob_provider ||= BlobProvider.new
   end
+  
+  def current_l1_block_number
+    @eth.get_block_number
+  end
+  memoize :current_l1_block_number, ttl: 12.seconds
 end

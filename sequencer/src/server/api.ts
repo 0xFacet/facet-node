@@ -16,7 +16,8 @@ interface JsonRpcRequest {
 export class SequencerAPI {
   private app: FastifyInstance;
   private ingress: IngressServer;
-  
+  private l2RpcUrl: string;
+
   constructor(
     private db: DatabaseService,
     private config: Config
@@ -24,8 +25,9 @@ export class SequencerAPI {
     this.app = Fastify({
       logger: false
     });
-    
+
     this.ingress = new IngressServer(db);
+    this.l2RpcUrl = config.l2RpcUrl;
     this.setupEndpoints();
   }
   
@@ -46,17 +48,7 @@ export class SequencerAPI {
             reply.send({ jsonrpc: '2.0', result: hash, id });
             break;
           }
-          
-          case 'eth_chainId': {
-            // l2ChainId is already a hex string like "0xface7b"
-            reply.send({ 
-              jsonrpc: '2.0', 
-              result: this.config.l2ChainId, 
-              id 
-            });
-            break;
-          }
-          
+
           case 'sequencer_getTxStatus': {
             const status = await this.ingress.getTransactionStatus(params[0] as Hex);
             reply.send({ jsonrpc: '2.0', result: status, id });
@@ -68,13 +60,11 @@ export class SequencerAPI {
             reply.send({ jsonrpc: '2.0', result: stats, id });
             break;
           }
-          
+
           default:
-            reply.code(404).send({
-              jsonrpc: '2.0',
-              error: { code: -32601, message: 'Method not found' },
-              id
-            });
+            // Proxy unknown methods to L2 RPC
+            const proxyResult = await this.proxyToL2(method, params, id);
+            reply.send(proxyResult);
         }
       } catch (error: any) {
         logger.error({ method, error: error.message }, 'RPC error');
@@ -114,6 +104,41 @@ export class SequencerAPI {
   
   async stop(): Promise<void> {
     await this.app.close();
+  }
+
+  private async proxyToL2(method: string, params: any[], id: number | string): Promise<any> {
+    try {
+      // Forward the exact RPC request to L2
+      const response = await fetch(this.l2RpcUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method,
+          params,
+          id
+        })
+      });
+
+      const result = await response.json();
+
+      // Log proxied methods for debugging (but not too verbose)
+      if (!['eth_getBlockByNumber', 'eth_blockNumber', 'eth_getBalance'].includes(method)) {
+        logger.debug({ method, proxiedTo: this.l2RpcUrl }, 'Proxied RPC method');
+      }
+
+      return result;
+    } catch (error: any) {
+      logger.error({ method, error: error.message }, 'Proxy to L2 failed');
+      return {
+        jsonrpc: '2.0',
+        error: {
+          code: -32000,
+          message: `Proxy error: ${error.message}`
+        },
+        id
+      };
+    }
   }
   
   private async checkHealth(): Promise<any> {

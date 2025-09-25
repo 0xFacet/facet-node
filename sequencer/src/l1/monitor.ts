@@ -154,13 +154,11 @@ export class InclusionMonitor {
       ).run('l1_included', batchId);
       
       // Update transactions to submitted
+      // Since we now use JSON array in batches.tx_hashes, we just update by batch_id
       database.prepare(`
-        UPDATE transactions t
+        UPDATE transactions
         SET state = 'submitted'
-        WHERE EXISTS (
-          SELECT 1 FROM batch_items bi 
-          WHERE bi.batch_id = ? AND bi.tx_hash = t.hash
-        ) AND t.state = 'batched'
+        WHERE batch_id = ? AND state = 'batched'
       `).run(batchId);
     })();
     

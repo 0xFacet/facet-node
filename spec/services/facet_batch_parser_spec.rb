@@ -188,4 +188,42 @@ RSpec.describe FacetBatchParser do
     # Return RLP-encoded batch
     Eth::Rlp.encode(facet_batch)
   end
+
+  describe 'real blob parsing' do
+    # This test uses real blob data from block 1193381
+    # Original test was in test_blob_parse.rb
+    it 'parses real blob data from block 1193381' do
+      # Real blob data (already decoded from blob format via BlobUtils.from_blobs)
+      blob_hex = '0x00000000000123450000008df88bf8890183face7b008408baf03af87bb87902f87683face7b8084773594008504a817c8008252089470997970c51812dc3a010c7d01b50e0d17dc79c888016345785d8a000080c080a09319812cf80571eaf0ff69a17e27537b4faf857c4268717ada7c2645fb0efab6a077e333b17b54b397972c1920bb1088d4de3c6a705061988a35d331d6e4c2ab6c80'
+
+      decoded_bytes = ByteString.from_hex(blob_hex)
+      parser = described_class.new(chain_id: 0xface7b)
+ 
+      # Parse the blob
+      batches = parser.parse_payload(
+        decoded_bytes,
+        1193381,
+        0,
+        FacetBatchConstants::Source::BLOB,
+        {}
+      )
+
+      expect(batches).not_to be_empty
+      expect(batches.length).to eq(1)
+
+      batch = batches.first
+      expect(batch.role).to eq(FacetBatchConstants::Role::FORCED)
+      expect(batch.transactions).to be_an(Array)
+      expect(batch.transactions.length).to eq(1)
+
+      # The transaction should be an EIP-1559 transaction
+      tx = batch.transactions.first
+      expect(tx).to be_a(ByteString)
+      
+      # Verify it can be decoded as an Ethereum transaction
+      decoded_tx = Eth::Tx.decode(tx.to_hex)
+      expect(decoded_tx).to be_a(Eth::Tx::Eip1559)
+      expect(decoded_tx.chain_id).to eq(0xface7b)
+    end
+  end
 end

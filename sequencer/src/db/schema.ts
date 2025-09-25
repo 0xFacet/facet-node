@@ -28,13 +28,10 @@ export interface Batch {
   gas_bid: string;
   tx_count: number;
   target_l1_block?: number;
+  tx_hashes: string; // JSON array of transaction hashes
 }
 
-export interface BatchItem {
-  batch_id: number;
-  ord: number;
-  tx_hash: Buffer;
-}
+// Removed BatchItem interface - now using JSON column in batches table
 
 export interface PostAttempt {
   id: number;
@@ -92,17 +89,8 @@ export const createSchema = (db: Database.Database) => {
       blob_size INTEGER NOT NULL,
       gas_bid TEXT NOT NULL,
       tx_count INTEGER NOT NULL,
-      target_l1_block INTEGER
-    );
-    
-    -- Preserves deterministic transaction order within batches
-    CREATE TABLE IF NOT EXISTS batch_items (
-      batch_id INTEGER NOT NULL,
-      ord INTEGER NOT NULL,
-      tx_hash BLOB NOT NULL,
-      PRIMARY KEY (batch_id, ord),
-      FOREIGN KEY (batch_id) REFERENCES batches(id),
-      FOREIGN KEY (tx_hash) REFERENCES transactions(hash)
+      target_l1_block INTEGER,
+      tx_hashes JSON NOT NULL DEFAULT '[]' -- JSON array of transaction hashes in order
     );
     
     -- Tracks all L1 submission attempts
@@ -138,8 +126,6 @@ export const createSchema = (db: Database.Database) => {
       ON batches(state) WHERE state IN ('sealed', 'submitted');
     CREATE INDEX IF NOT EXISTS idx_batch_content_hash 
       ON batches(content_hash);
-    CREATE INDEX IF NOT EXISTS idx_batch_items_tx 
-      ON batch_items(tx_hash);
     CREATE INDEX IF NOT EXISTS idx_attempts_pending 
       ON post_attempts(status, submitted_at) WHERE status = 'pending';
     CREATE INDEX IF NOT EXISTS idx_attempts_batch 
