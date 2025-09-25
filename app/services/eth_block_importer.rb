@@ -1,3 +1,5 @@
+require 'l1_rpc_prefetcher'
+
 class EthBlockImporter
   include SysConfig
   include Memery
@@ -7,10 +9,9 @@ class EthBlockImporter
   # Raised when a re-org is detected (parent hash mismatch)
   class ReorgDetectedError < StandardError; end
   
-  attr_accessor :l1_rpc_results, :facet_block_cache, :ethereum_client, :eth_block_cache, :geth_driver
+  attr_accessor :facet_block_cache, :ethereum_client, :eth_block_cache, :geth_driver, :prefetcher, :logger
   
   def initialize
-    @l1_rpc_results = {}
     @facet_block_cache = {}
     @eth_block_cache = {}
     
@@ -18,10 +19,14 @@ class EthBlockImporter
     
     @geth_driver = GethDriver
     
+    @logger = Rails.logger
+    
     MemeryExtensions.clear_all_caches!
     
     set_eth_block_starting_points
     populate_facet_block_cache
+    
+    @prefetcher = L1RpcPrefetcher.new(ethereum_client: @ethereum_client)
   end
   
   def current_max_facet_block_number
@@ -61,10 +66,6 @@ class EthBlockImporter
     logger.info "Populated facet block cache with #{facet_block_cache.size} blocks from #{epochs_found} epochs"
   end
   
-  def logger
-    Rails.logger
-  end
-  
   def blocks_behind
     (current_block_number - next_block_to_import) + 1
   end
@@ -73,11 +74,7 @@ class EthBlockImporter
     ethereum_client.get_block_number
   end
   memoize :current_block_number, ttl: 12.seconds
-  
-  def import_batch_size
-    [blocks_behind, ENV.fetch('BLOCK_IMPORT_BATCH_SIZE', 2).to_i].min
-  end
-  
+
   def find_first_l2_block_in_epoch(l2_block_number_candidate)
     l1_attributes = GethDriver.client.get_l1_attributes(l2_block_number_candidate)
     
@@ -147,58 +144,64 @@ class EthBlockImporter
   
   def import_blocks_until_done
     MemeryExtensions.clear_all_caches!
-    
+
+    # Initialize stats tracking
+    stats_start_time = Time.current
+    stats_start_block = current_max_eth_block_number
+    blocks_imported_count = 0
+    total_gas_used = 0
+    total_transactions = 0
+    imported_l2_blocks = []
+
+    # Track timing for recent batch calculations
+    recent_batch_start_time = Time.current
+
     loop do
       begin
-        block_numbers = next_blocks_to_import(import_batch_size)
-        
-        if block_numbers.blank?
+        block_number = next_block_to_import
+
+        if block_number.nil?
           raise BlockNotReadyToImportError.new("Block not ready")
         end
-        
-        populate_l1_rpc_results(block_numbers)
-        
-        import_blocks(block_numbers)
+
+        l2_blocks, l1_blocks = import_single_block(block_number)
+        blocks_imported_count += 1
+
+        # Collect stats from imported L2 blocks
+        if l2_blocks.any?
+          imported_l2_blocks.concat(l2_blocks)
+          l2_blocks.each do |l2_block|
+            total_gas_used += l2_block.gas_used if l2_block.gas_used
+            total_transactions += l2_block.facet_transactions.length if l2_block.facet_transactions
+          end
+        end
+
+        # Report stats every 25 blocks
+        if blocks_imported_count % 25 == 0
+          recent_batch_time = Time.current - recent_batch_start_time
+          report_import_stats(
+            blocks_imported_count: blocks_imported_count,
+            stats_start_time: stats_start_time,
+            stats_start_block: stats_start_block,
+            total_gas_used: total_gas_used,
+            total_transactions: total_transactions,
+            imported_l2_blocks: imported_l2_blocks,
+            recent_batch_time: recent_batch_time
+          )
+          # Reset recent batch timer
+          recent_batch_start_time = Time.current
+        end
+
       rescue BlockNotReadyToImportError => e
         puts "#{e.message}. Stopping import."
         break
+      rescue ReorgDetectedError => e
+        logger.error "Reorg detected: #{e.message}"
+        raise e
       end
     end
   end
   
-  def populate_l1_rpc_results(block_numbers)
-    next_start_block = block_numbers.last + 1
-    next_block_numbers = (next_start_block...(next_start_block + import_batch_size)).to_a
-    
-    blocks_to_import = block_numbers
-    
-    if blocks_behind > 1
-      blocks_to_import += next_block_numbers.select do |num|
-        num <= current_block_number
-      end
-    end
-    
-    blocks_to_import -= l1_rpc_results.keys
-    
-    l1_rpc_results.reverse_merge!(get_blocks_promises(blocks_to_import))
-  end
-  
-  def get_blocks_promises(block_numbers)
-    block_numbers.map do |block_number|
-      block_promise = Concurrent::Promise.execute do
-        ethereum_client.get_block(block_number, true)
-      end
-      
-      receipt_promise = Concurrent::Promise.execute do
-        ethereum_client.get_transaction_receipts(block_number)
-      end
-      
-      [block_number, {
-        block: block_promise,
-        receipts: receipt_promise
-      }.with_indifferent_access]
-    end.to_h
-  end
   
   def fetch_block_from_cache(block_number)
     block_number = [block_number, 0].max
@@ -219,6 +222,9 @@ class EthBlockImporter
     facet_block_cache.delete_if do |_, facet_block|
       facet_block.eth_block_number < oldest_eth_block_to_keep
     end
+    
+    # Also prune the prefetcher cache
+    prefetcher.clear_older_than(oldest_eth_block_to_keep)
   end
   
   def current_facet_block(type)
@@ -261,98 +267,87 @@ class EthBlockImporter
     current_facet_block(:finalized)
   end
   
-  def import_blocks(block_numbers)
-    puts "Block Importer: importing blocks #{block_numbers.join(', ')}"
-    start = Time.current
-    
-    block_responses = l1_rpc_results.select do |block_number, _|
-      block_numbers.include?(block_number)
-    end.to_h.transform_values do |hsh|
-      hsh.transform_values(&:value!)
-    end
-  
-    l1_rpc_results.reject! { |block_number, _| block_responses.key?(block_number) }
-    
-    eth_blocks = []
-    facet_blocks = []
-    res = []
-    
-    block_numbers.each.with_index do |block_number, index|
-      block_response = block_responses[block_number]
-      
-      block_result = block_response['block']
-      receipt_result = block_response['receipts']
-      
-      parent_eth_block = eth_block_cache[block_number - 1]
-      
-      if parent_eth_block && parent_eth_block.block_hash != Hash32.from_hex(block_result['parentHash'])
-        logger.info "Reorg detected at block #{block_number}"
-        raise ReorgDetectedError
-      end
-      
-      eth_block = EthBlock.from_rpc_result(block_result)
+ def import_single_block(block_number)
+  start = Time.current
 
-      facet_block = FacetBlock.from_eth_block(eth_block)
-      
-      # Use batch collection v2 if enabled, otherwise use v1
-      facet_txs = if SysConfig.facet_batch_v2_enabled?
-        collect_facet_transactions_v2(block_result, receipt_result)
-      else
-        EthTransaction.facet_txs_from_rpc_results(block_result, receipt_result)
-      end
-      
-      facet_txs.each do |facet_tx|
-        facet_tx.facet_block = facet_block
-      end
-      
-      imported_facet_blocks = propose_facet_block(
-        facet_block: facet_block,
-        facet_txs: facet_txs
-      )
-      
-      imported_facet_blocks.each do |facet_block|
-        facet_block_cache[facet_block.number] = facet_block
-      end
-      
-      eth_block_cache[eth_block.number] = eth_block
-      
-      prune_caches
-      
-      facet_blocks.concat(imported_facet_blocks)
-      eth_blocks << eth_block
-      
-      res << OpenStruct.new(
-        facet_block: imported_facet_blocks.last,
-        transactions_imported: imported_facet_blocks.last.facet_transactions.length
-      )
+  # Fetch block data from prefetcher
+  response = prefetcher.fetch(block_number)
+
+  # Handle cancellation, fetch failure, or block not ready
+  if response.nil?
+    raise BlockNotReadyToImportError.new("Block #{block_number} fetch was cancelled or 
+failed")
+  end
+
+  if response[:error] == :not_ready
+    raise BlockNotReadyToImportError.new("Block #{block_number} not yet available on L1")
+  end
+
+  # Extract data from prefetcher response
+  eth_block = response[:eth_block]
+  block_result = response[:block_result]
+  receipt_result = response[:receipt_result]
+
+  # Create facet block from eth_block
+  facet_block = FacetBlock.from_eth_block(eth_block)
+
+  # Use batch collection v2 if enabled, otherwise use v1
+  facet_txs = if SysConfig.facet_batch_v2_enabled?
+    collect_facet_transactions_v2(block_result, receipt_result)
+  else
+    EthTransaction.facet_txs_from_rpc_results(block_result, receipt_result)
+  end
+
+  facet_txs.each do |facet_tx|
+    facet_tx.facet_block = facet_block
+  end
+
+  # Check for reorg by validating parent hash
+  parent_eth_block = eth_block_cache[block_number - 1]
+  if parent_eth_block && parent_eth_block.block_hash != eth_block.parent_hash
+    logger.error "Reorg detected at block #{block_number}"
+    raise ReorgDetectedError.new("Parent hash mismatch at block #{block_number}")
+  end
+
+  # Import the L2 block(s)
+  imported_facet_blocks = propose_facet_block(
+    facet_block: facet_block,
+    facet_txs: facet_txs
+  )
+
+  logger.debug "Block #{block_number}: Found #{facet_txs.length} facet txs, created 
+#{imported_facet_blocks.length} L2 blocks"
+
+  # Update caches
+  imported_facet_blocks.each do |fb|
+    facet_block_cache[fb.number] = fb
+  end
+  eth_block_cache[eth_block.number] = eth_block
+  prune_caches
+
+  [imported_facet_blocks, [eth_block]]
+end
+
+  # Thin wrapper for compatibility with specs that use import_blocks directly
+  def import_blocks(block_numbers)
+    all_facet_blocks = []
+    all_eth_blocks = []
+
+    block_numbers.each do |block_number|
+      facet_blocks, eth_blocks = import_single_block(block_number)
+      all_facet_blocks.concat(facet_blocks)
+      all_eth_blocks.concat(eth_blocks)
     end
-  
-    elapsed_time = Time.current - start
-  
-    blocks = res.map(&:facet_block)
-    total_gas = blocks.sum(&:gas_used)
-    total_transactions = res.sum(&:transactions_imported)
-    blocks_per_second = (blocks.length / elapsed_time).round(2)
-    transactions_per_second = (total_transactions / elapsed_time).round(2)
-    total_gas_millions = (total_gas / 1_000_000.0).round(2)
-    average_gas_per_block_millions = (total_gas / blocks.length / 1_000_000.0).round(2)
-    gas_per_second_millions = (total_gas / elapsed_time / 1_000_000.0).round(2)
-  
-    logger.info "Time elapsed: #{elapsed_time.round(2)} s"
-    logger.info "Imported #{block_numbers.length} blocks. #{blocks_per_second} blocks / s"
-    logger.info "Imported #{total_transactions} transactions (#{transactions_per_second} / s)"
-    logger.info "Total gas used: #{total_gas_millions} million (avg: #{average_gas_per_block_millions} million / block)"
-    logger.info "Gas per second: #{gas_per_second_millions} million / s"
-  
-    [facet_blocks, eth_blocks]
+
+    [all_facet_blocks, all_eth_blocks]
   end
   
   def import_next_block
     block_number = next_block_to_import
-    
-    populate_l1_rpc_results([block_number])
-    
-    import_blocks([block_number])
+
+    prefetcher.ensure_prefetched(block_number)
+
+    import_single_block(block_number)
   end
   
   def next_block_to_import
@@ -385,12 +380,10 @@ class EthBlockImporter
     @blob_provider ||= BlobProvider.new
   end
   
-  private
-  
   # Collect Facet transactions using the v2 batch-aware system
   def collect_facet_transactions_v2(block_result, receipt_result)
     block_number = block_result['number'].to_i(16)
-    
+
     # Use the batch collector to find all transactions
     collector = FacetBatchCollector.new(
       eth_block: block_result,
@@ -398,9 +391,9 @@ class EthBlockImporter
       blob_provider: blob_provider,
       logger: logger
     )
-    
+
     collected = collector.call
-    
+
     # Build the final transaction order
     builder = FacetBlockBuilder.new(
       collected: collected,
@@ -408,7 +401,57 @@ class EthBlockImporter
       get_authorized_signer: ->(block_num) { PriorityRegistry.instance.authorized_signer(block_num) },
       logger: logger
     )
-    
+
     builder.ordered_transactions(block_number)
+  end
+    
+  def shutdown
+    @prefetcher&.shutdown
+  end
+
+  def report_import_stats(blocks_imported_count:, stats_start_time:, stats_start_block:,
+                         total_gas_used:, total_transactions:, imported_l2_blocks:, recent_batch_time:)
+    elapsed_time = Time.current - stats_start_time
+    current_block = current_max_eth_block_number
+
+    # Calculate cumulative metrics (entire session)
+    cumulative_blocks_per_second = blocks_imported_count / elapsed_time
+    cumulative_transactions_per_second = total_transactions / elapsed_time
+    total_gas_millions = (total_gas_used / 1_000_000.0).round(2)
+    cumulative_gas_per_second_millions = (total_gas_used / elapsed_time / 1_000_000.0).round(2)
+
+    # Calculate recent batch metrics (last 25 blocks using actual timing)
+    recent_l2_blocks = imported_l2_blocks.last(25)
+    recent_gas = recent_l2_blocks.sum { |block| block.gas_used || 0 }
+    recent_transactions = recent_l2_blocks.sum { |block| block.facet_transactions&.length || 0 }
+
+    recent_blocks_per_second = 25 / recent_batch_time
+    recent_transactions_per_second = recent_transactions / recent_batch_time
+    recent_gas_millions = (recent_gas / 1_000_000.0).round(2)
+    recent_gas_per_second_millions = (recent_gas / recent_batch_time / 1_000_000.0).round(2)
+
+    # Build single comprehensive stats message
+    stats_message = <<~MSG
+      #{"=" * 70}
+      📊 IMPORT STATS
+      🏁 Blocks: #{stats_start_block + 1} → #{current_block} (#{blocks_imported_count} total)
+
+      ⚡ Speed: #{recent_blocks_per_second.round(1)} bl/s (#{cumulative_blocks_per_second.round(1)} session)
+      📝 Transactions: #{recent_transactions} (#{total_transactions} total) | #{recent_transactions_per_second.round(1)}/s (#{cumulative_transactions_per_second.round(1)}/s session)
+      ⛽ Gas: #{recent_gas_millions}M (#{total_gas_millions}M total) | #{recent_gas_per_second_millions.round(1)}M/s (#{cumulative_gas_per_second_millions.round(1)}M/s session)
+      ⏱️  Time: #{recent_batch_time.round(1)}s recent | #{elapsed_time.round(1)}s total session
+    MSG
+
+    # Add prefetcher stats if available
+    if blocks_imported_count >= 10
+      stats = prefetcher.stats
+      prefetcher_line = "🔄 Prefetcher: #{stats[:promises_fulfilled]}/#{stats[:promises_total]} fulfilled (#{stats[:threads_active]} active, #{stats[:threads_queued]} queued)"
+      stats_message += "\n#{prefetcher_line}"
+    end
+
+    stats_message += "\n#{"=" * 70}"
+
+    # Output single message
+    logger.info stats_message
   end
 end

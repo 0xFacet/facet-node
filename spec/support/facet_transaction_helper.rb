@@ -1,7 +1,5 @@
 module FacetTransactionHelper
   def import_eth_txs(transactions)
-    mock_ethereum_client = instance_double(EthRpcClient)
-    
     importer = ImporterSingleton.instance
     current_max_eth_block = importer.current_max_eth_block
     
@@ -34,14 +32,36 @@ module FacetTransactionHelper
     rpc_results = eth_txs_to_rpc_result(eth_transactions)
     block_result = rpc_results[0].merge('parentHash' => current_max_eth_block.block_hash.to_hex)
     receipt_result = rpc_results[1]
-    
-    old_client = importer.ethereum_client
-    
-    importer.ethereum_client = mock_ethereum_client
-    
-    allow(mock_ethereum_client).to receive(:get_block_number).and_return(eth_transactions.first.block_number)
-    allow(mock_ethereum_client).to receive(:get_block).and_return(block_result)
-    allow(mock_ethereum_client).to receive(:get_transaction_receipts).and_return(receipt_result)
+
+    # Create the mock response for the prefetcher
+    eth_block = EthBlock.from_rpc_result(block_result)
+    facet_block = FacetBlock.from_eth_block(eth_block)
+    facet_txs = EthTransaction.facet_txs_from_rpc_results(block_result, receipt_result)
+
+    mock_prefetcher_response = {
+      error: nil,
+      eth_block: eth_block,
+      facet_block: facet_block,
+      facet_txs: facet_txs
+    }
+
+    # Mock the prefetcher
+    old_prefetcher = importer.prefetcher
+    mock_prefetcher = instance_double(L1RpcPrefetcher)
+    allow(mock_prefetcher).to receive(:fetch).with(eth_block.number).and_return(mock_prefetcher_response)
+    allow(mock_prefetcher).to receive(:ensure_prefetched)
+    allow(mock_prefetcher).to receive(:clear_older_than)
+    allow(mock_prefetcher).to receive(:stats).and_return({
+      promises_total: 0,
+      promises_fulfilled: 0,
+      promises_pending: 0,
+      threads_active: 0,
+      threads_queued: 0
+    })
+
+    # Replace the prefetcher
+    importer.prefetcher = mock_prefetcher
+
     facet_blocks, eth_blocks = importer.import_next_block
     
     latest_l2_block = EthRpcClient.l2.get_block("latest", true)
@@ -54,6 +74,11 @@ module FacetTransactionHelper
       tx_in_geth = latest_l2_block['transactions'].find do |tx|
         next false if tx['sourceHash'].nil?
         eth_tx.facet_tx_source_hash == Hash32.from_hex(tx['sourceHash'])
+      end
+      
+      if tx_in_geth.nil?
+        puts "Could not find transaction with sourceHash: #{eth_tx.facet_tx_source_hash.to_hex}"
+        puts "Available transactions: #{latest_l2_block['transactions'].map { |tx| tx['sourceHash'] }}"
       end
       
       next nil if tx_in_geth.nil?
@@ -69,7 +94,7 @@ module FacetTransactionHelper
 
     res
   ensure
-    importer.ethereum_client = old_client
+    importer.prefetcher = old_prefetcher
   end
 
   # Keep the original method for backwards compatibility
