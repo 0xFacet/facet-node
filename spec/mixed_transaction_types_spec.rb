@@ -161,7 +161,7 @@ RSpec.describe "Mixed Transaction Types" do
       current_max_eth_block = importer.current_max_eth_block
       
       # Use a single test key and fund it once
-      test_key = "0x0000000000000000000000000000000000000000000000000000000000000003"
+      test_key = "0x0000000000000000000000000000000000000000000000000000000000000033"
       test_address = Eth::Key.new(priv: test_key).address.to_s
       
       # Fund the address with a large calldata transaction
@@ -183,7 +183,11 @@ RSpec.describe "Mixed Transaction Types" do
       
       # Update current block after funding
       current_max_eth_block = importer.current_max_eth_block
-      base_nonce = 1  # Nonce 1 after funding transaction
+      
+      # Get the actual nonce for the account
+      actual_nonce = EthRpcClient.l2.get_transaction_count(test_address)
+      puts "Actual nonce for test account after funding: #{actual_nonce}"
+      base_nonce = actual_nonce  # Use actual nonce instead of assuming 1
       
       # Create small transactions for priority batch
       small_txs = 3.times.map do |i|

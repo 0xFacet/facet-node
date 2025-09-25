@@ -10,6 +10,7 @@
 # Ignore all environment files (except templates).
 /.env*
 !/.env*.erb
+!/.env.node.example
 
 # Ignore all logfiles and tempfiles.
 /log/*
@@ -34,3 +35,7 @@
 /contracts/forge-artifacts/
 /contracts/cache/
 /contracts/broadcast/*
+
+# Node.js dependencies
+node_modules/
+package-lock.json

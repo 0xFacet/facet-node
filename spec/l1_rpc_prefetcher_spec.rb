@@ -13,7 +13,7 @@ RSpec.describe L1RpcPrefetcher do
   end
   
   describe '#fetch' do
-    let(:block_data) { { 'number' => '0x1', 'hash' => '0x123' } }
+    let(:block_data) { { 'number' => '0x1', 'hash' => '0x123', "transactions" => [] } }
     let(:receipts_data) { [] }
     
     before do

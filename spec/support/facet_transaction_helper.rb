@@ -36,13 +36,21 @@ module FacetTransactionHelper
     # Create the mock response for the prefetcher
     eth_block = EthBlock.from_rpc_result(block_result)
     facet_block = FacetBlock.from_eth_block(eth_block)
-    facet_txs = EthTransaction.facet_txs_from_rpc_results(block_result, receipt_result)
+
+    # Use batch collection v2 if enabled, otherwise use v1
+    facet_txs = if SysConfig.facet_batch_v2_enabled?
+      L1RpcPrefetcher.send(:allocate).collect_facet_transactions_v2(block_result, receipt_result)
+    else
+      EthTransaction.facet_txs_from_rpc_results(block_result, receipt_result)
+    end
 
     mock_prefetcher_response = {
       error: nil,
       eth_block: eth_block,
       facet_block: facet_block,
-      facet_txs: facet_txs
+      facet_txs: facet_txs,
+      block_result: block_result,
+      receipt_result: receipt_result
     }
 
     # Mock the prefetcher
