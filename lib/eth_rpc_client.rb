@@ -1,4 +1,6 @@
 class EthRpcClient
+  include Memery
+  
   class HttpError < StandardError
     attr_reader :code, :http_message
     
@@ -39,6 +41,13 @@ class EthRpcClient
   end
   
   def get_nonce(address, block_number = "latest")
+    query_api(
+      method: 'eth_getTransactionCount',
+      params: [address, block_number]
+    ).to_i(16)
+  end
+  
+  def get_transaction_count(address, block_number = "latest")
     query_api(
       method: 'eth_getTransactionCount',
       params: [address, block_number]
@@ -102,6 +111,7 @@ class EthRpcClient
   def get_block_number
     query_api(method: 'eth_blockNumber').to_i(16)
   end
+  memoize :get_block_number, ttl: 12.seconds
 
   def query_api(method = nil, params = [], **kwargs)
     if kwargs.present?

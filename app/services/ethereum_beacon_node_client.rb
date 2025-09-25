@@ -1,4 +1,6 @@
 class EthereumBeaconNodeClient
+  include Memery
+  
   attr_accessor :base_url, :api_key
 
   def initialize(base_url: ENV['ETHEREUM_BEACON_NODE_API_BASE_URL'], api_key: ENV['ETHEREUM_BEACON_NODE_API_KEY'])
@@ -35,6 +37,7 @@ class EthereumBeaconNodeClient
     
     response.parsed_response['data']
   end
+  memoize :get_genesis
 
   # Fetches consensus spec values (e.g., seconds_per_slot). Field name casing
   # can differ across clients; we normalize in seconds_per_slot.

@@ -48,7 +48,7 @@ module GethDriver
     
     system_txs = [new_facet_block.attributes_tx]
     
-    if new_facet_block.number == 1
+    if new_facet_block.number == 1 && !ChainIdManager.on_hoodi?
       migration_manager_address = "0x22220000000000000000000000000000000000d6"
       function_selector = ByteString.from_bin(Eth::Util.keccak256('transactionsRequired()').first(4)).to_hex
 
@@ -87,6 +87,13 @@ module GethDriver
     
     transactions_with_attributes = system_txs + transactions
     transaction_payloads = transactions_with_attributes.map(&:to_facet_payload)
+
+    # Log transaction summary
+    system_count = system_txs.length
+    user_count = transactions.length
+    if user_count > 0 || system_count > 1  # 1 is just the attributes tx
+      Rails.logger.info "Block #{new_facet_block.number}: Proposing #{system_count} system txs, #{user_count} user txs to geth"
+    end
     
     payload_attributes = {
       timestamp: "0x" + new_facet_block.timestamp.to_s(16),
@@ -127,6 +134,66 @@ module GethDriver
     
     if payload['transactions'].empty?
       raise "No transactions in returned payload"
+    end
+    
+    # Check if geth dropped any transactions we submitted
+    submitted_count = transaction_payloads.size
+    returned_count = payload['transactions'].size
+    
+    if submitted_count != returned_count
+      dropped_count = submitted_count - returned_count
+      Rails.logger.warn("Block #{new_facet_block.number}: Geth rejected #{dropped_count} of #{submitted_count} txs (accepted #{returned_count})")
+      
+      # Identify which transactions were dropped by comparing hashes
+      submitted_hashes = transaction_payloads.map do |tx_payload|
+        # Convert ByteString to binary string if needed
+        tx_data = tx_payload.is_a?(ByteString) ? tx_payload.to_bin : tx_payload
+        ByteString.from_bin(Eth::Util.keccak256(tx_data)).to_hex
+      end
+      
+      returned_hashes = payload['transactions'].map do |tx_payload|
+        # Convert ByteString to binary string if needed
+        tx_data = tx_payload.is_a?(ByteString) ? tx_payload.to_bin : tx_payload
+        ByteString.from_bin(Eth::Util.keccak256(tx_data)).to_hex
+      end
+      
+      dropped_hashes = submitted_hashes - returned_hashes
+      
+      if dropped_hashes.any?
+        Rails.logger.warn("Dropped transaction hashes: #{dropped_hashes.join(', ')}")
+        
+        # Log details about each dropped transaction for debugging
+        transaction_payloads.each_with_index do |tx_payload, index|
+          # Convert ByteString to binary string if needed
+          tx_data = tx_payload.is_a?(ByteString) ? tx_payload.to_bin : tx_payload
+          tx_hash = ByteString.from_bin(Eth::Util.keccak256(tx_data)).to_hex
+          if dropped_hashes.include?(tx_hash)
+            # Try to decode the transaction to get more details
+            begin
+              decoded_tx = Eth::Tx.decode(tx_data)
+              
+              # Handle different transaction types
+              nonce = if decoded_tx.respond_to?(:nonce)
+                decoded_tx.nonce
+              elsif decoded_tx.respond_to?(:signer_nonce)
+                decoded_tx.signer_nonce
+              else
+                "unknown"
+              end
+              
+              from = decoded_tx.respond_to?(:from) ? decoded_tx.from : "unknown"
+              to = decoded_tx.respond_to?(:destination) ? decoded_tx.destination : 
+                   decoded_tx.respond_to?(:to) ? decoded_tx.to : "unknown"
+              
+              Rails.logger.warn("Dropped tx #{index}: hash=#{tx_hash}, nonce=#{nonce}, from=#{from}, to=#{to}")
+            rescue => e
+              Rails.logger.warn("Dropped tx #{index}: hash=#{tx_hash} (could not decode: #{e.message})")
+            end
+          end
+        end
+      end
+    else
+      Rails.logger.debug("All #{submitted_count} submitted transactions were included by geth")
     end
 
     new_payload_request = [payload]
@@ -221,7 +288,9 @@ module GethDriver
     authrpc_port = ENV.fetch('GETH_RPC_URL').split(':').last
     discovery_port = ENV.fetch('GETH_DISCOVERY_PORT')
     
-    genesis_filename = ChainIdManager.on_mainnet? ? "facet-mainnet.json" : "facet-sepolia.json"
+    network = ChainIdManager.current_l1_network
+    
+    genesis_filename = "facet-#{network}.json"
     
     command = [
       "./facet-chain/unzip_genesis.sh &&",

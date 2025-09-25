@@ -95,14 +95,18 @@ class BatchSignatureVerifier
     # Adjust v for EIP-155
     v = v < 27 ? v + 27 : v
     
-    # Create signature object
-    sig = Eth::Signature.new(
-      signature_bytes: r + s + [v - 27].pack('C')
-    )
+    # Create signature for recovery
+    # The eth.rb gem expects r (32 bytes) + s (32 bytes) + v (variable length hex)
+    v_hex = v.to_s(16).rjust(2, '0')  # Ensure at least 2 hex chars
+    signature_hex = r.unpack1('H*') + s.unpack1('H*') + v_hex
     
     # Recover public key and derive address
-    public_key = sig.recover_public_key(message_hash)
-    address = Eth::Util.public_key_to_address(public_key)
+    public_key = Eth::Signature.recover(message_hash, signature_hex)
+    # public_key_to_address expects a hex string
+    public_key_hex = public_key.is_a?(String) ? public_key : public_key.uncompressed.unpack1('H*')
+    address = Eth::Util.public_key_to_address(public_key_hex)
+    # Handle both string and Eth::Address object returns
+    address = address.is_a?(String) ? address : address.to_s
     
     Address20.from_hex(address)
   end

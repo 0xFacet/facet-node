@@ -1,0 +1,7 @@
+node_modules
+dist
+.env
+data
+.test-nonce
+*.log
+.DS_Store

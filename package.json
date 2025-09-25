@@ -1,0 +1,14 @@
+{
+  "name": "facet-blob-e2e",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "E2E testing for Facet blob transactions",
+  "scripts": {
+    "send-blob": "node scripts/send_facet_blob_tx.mjs"
+  },
+  "dependencies": {
+    "viem": "2.37.5",
+    "c-kzg": "4.1.0",
+    "dotenv": "17.2.2"
+  }
+}

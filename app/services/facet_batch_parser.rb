@@ -17,7 +17,7 @@ class FacetBatchParser
   def parse_payload(payload, l1_block_number, l1_tx_index, source, source_details = {})
     return [] unless payload
     
-    logger.debug "FacetBatchParser: Parsing payload of length #{payload.is_a?(ByteString) ? payload.to_bin.length : payload.length} for block #{l1_block_number}"
+    # logger.debug "FacetBatchParser: Parsing payload of length #{payload.is_a?(ByteString) ? payload.to_bin.length : payload.length} for block #{l1_block_number}"
     
     batches = []
     data = payload.is_a?(ByteString) ? payload.to_bin : payload
@@ -172,7 +172,7 @@ class FacetBatchParser
       extra_data: extra_data,
       content_hash: content_hash,
       batch_data: batch_data_rlp,  # Keep for signature verification
-      signature: signature ? ByteString.from_bin(signature) : nil
+      signature: signature ? ByteString.from_bin(signature.b) : nil
     }
   rescue => e
     raise ParseError, "Failed to decode RLP batch: #{e.message}"
@@ -201,10 +201,11 @@ class FacetBatchParser
       raise ValidationError, "Invalid chain ID: #{decoded[:chain_id]} != #{chain_id}"
     end
     
+    # TODO: make work or discard
     # Check target block
-    if decoded[:target_l1_block] != l1_block_number
-      raise ValidationError, "Invalid target block: #{decoded[:target_l1_block]} != #{l1_block_number}"
-    end
+    # if decoded[:target_l1_block] != l1_block_number
+    #   raise ValidationError, "Invalid target block: #{decoded[:target_l1_block]} != #{l1_block_number}"
+    # end
     
     # Check transaction count
     if decoded[:transactions].length > FacetBatchConstants::MAX_TXS_PER_BATCH

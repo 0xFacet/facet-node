@@ -267,66 +267,54 @@ class EthBlockImporter
     current_facet_block(:finalized)
   end
   
- def import_single_block(block_number)
-  start = Time.current
+  def import_single_block(block_number)
+    start = Time.current
 
-  # Fetch block data from prefetcher
-  response = prefetcher.fetch(block_number)
+    # Fetch block data from prefetcher
+    response = prefetcher.fetch(block_number)
 
-  # Handle cancellation, fetch failure, or block not ready
-  if response.nil?
-    raise BlockNotReadyToImportError.new("Block #{block_number} fetch was cancelled or 
-failed")
+    # Handle cancellation, fetch failure, or block not ready
+    if response.nil?
+      raise BlockNotReadyToImportError.new("Block #{block_number} fetch was cancelled or failed")
+    end
+
+    if response[:error] == :not_ready
+      raise BlockNotReadyToImportError.new("Block #{block_number} not yet available on L1")
+    end
+
+    # Extract data from prefetcher response
+    eth_block = response[:eth_block]
+    facet_block = response[:facet_block]
+    facet_txs = response[:facet_txs]
+
+    facet_txs.each do |facet_tx|
+      facet_tx.facet_block = facet_block
+    end
+
+    # Check for reorg by validating parent hash
+    parent_eth_block = eth_block_cache[block_number - 1]
+    if parent_eth_block && parent_eth_block.block_hash != eth_block.parent_hash
+      logger.error "Reorg detected at block #{block_number}"
+      raise ReorgDetectedError.new("Parent hash mismatch at block #{block_number}")
+    end
+
+    # Import the L2 block(s)
+    imported_facet_blocks = propose_facet_block(
+      facet_block: facet_block,
+      facet_txs: facet_txs
+    )
+
+    logger.debug "Block #{block_number}: Found #{facet_txs.length} facet txs, created #{imported_facet_blocks.length} L2 blocks"
+
+    # Update caches
+    imported_facet_blocks.each do |fb|
+      facet_block_cache[fb.number] = fb
+    end
+    eth_block_cache[eth_block.number] = eth_block
+    prune_caches
+
+    [imported_facet_blocks, [eth_block]]
   end
-
-  if response[:error] == :not_ready
-    raise BlockNotReadyToImportError.new("Block #{block_number} not yet available on L1")
-  end
-
-  # Extract data from prefetcher response
-  eth_block = response[:eth_block]
-  block_result = response[:block_result]
-  receipt_result = response[:receipt_result]
-
-  # Create facet block from eth_block
-  facet_block = FacetBlock.from_eth_block(eth_block)
-
-  # Use batch collection v2 if enabled, otherwise use v1
-  facet_txs = if SysConfig.facet_batch_v2_enabled?
-    collect_facet_transactions_v2(block_result, receipt_result)
-  else
-    EthTransaction.facet_txs_from_rpc_results(block_result, receipt_result)
-  end
-
-  facet_txs.each do |facet_tx|
-    facet_tx.facet_block = facet_block
-  end
-
-  # Check for reorg by validating parent hash
-  parent_eth_block = eth_block_cache[block_number - 1]
-  if parent_eth_block && parent_eth_block.block_hash != eth_block.parent_hash
-    logger.error "Reorg detected at block #{block_number}"
-    raise ReorgDetectedError.new("Parent hash mismatch at block #{block_number}")
-  end
-
-  # Import the L2 block(s)
-  imported_facet_blocks = propose_facet_block(
-    facet_block: facet_block,
-    facet_txs: facet_txs
-  )
-
-  logger.debug "Block #{block_number}: Found #{facet_txs.length} facet txs, created 
-#{imported_facet_blocks.length} L2 blocks"
-
-  # Update caches
-  imported_facet_blocks.each do |fb|
-    facet_block_cache[fb.number] = fb
-  end
-  eth_block_cache[eth_block.number] = eth_block
-  prune_caches
-
-  [imported_facet_blocks, [eth_block]]
-end
 
   # Thin wrapper for compatibility with specs that use import_blocks directly
   def import_blocks(block_numbers)
@@ -376,35 +364,6 @@ end
     @geth_driver
   end
   
-  def blob_provider
-    @blob_provider ||= BlobProvider.new
-  end
-  
-  # Collect Facet transactions using the v2 batch-aware system
-  def collect_facet_transactions_v2(block_result, receipt_result)
-    block_number = block_result['number'].to_i(16)
-
-    # Use the batch collector to find all transactions
-    collector = FacetBatchCollector.new(
-      eth_block: block_result,
-      receipts: receipt_result,
-      blob_provider: blob_provider,
-      logger: logger
-    )
-
-    collected = collector.call
-
-    # Build the final transaction order
-    builder = FacetBlockBuilder.new(
-      collected: collected,
-      l2_block_gas_limit: SysConfig::L2_BLOCK_GAS_LIMIT,  # Use constant directly
-      get_authorized_signer: ->(block_num) { PriorityRegistry.instance.authorized_signer(block_num) },
-      logger: logger
-    )
-
-    builder.ordered_transactions(block_number)
-  end
-    
   def shutdown
     @prefetcher&.shutdown
   end

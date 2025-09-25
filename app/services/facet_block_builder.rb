@@ -26,6 +26,7 @@ class FacetBlockBuilder
         facet_tx = create_facet_transaction(tx_bytes, priority_batch)
         transactions << facet_tx if facet_tx
       end
+      logger.debug "After adding priority batch: #{transactions.length} total transactions"
     else
       logger.debug "No priority batch selected for block #{l1_block_number}"
     end
@@ -37,6 +38,7 @@ class FacetBlockBuilder
     permissionless_sources.sort_by! { |source| source[:l1_tx_index] }
     
     # Unwrap transactions from each source
+    logger.debug "Processing #{permissionless_sources.length} permissionless sources"
     permissionless_sources.each do |source|
       case source[:type]
       when :single
@@ -45,14 +47,32 @@ class FacetBlockBuilder
         transactions << facet_tx if facet_tx
       when :batch
         # Forced batch - unwrap all transactions
+        logger.debug "Processing forced batch with #{source[:data].transactions.length} transactions"
         source[:data].transactions.each do |tx_bytes|
           facet_tx = create_facet_transaction(tx_bytes, source[:data])
-          transactions << facet_tx if facet_tx
+          if facet_tx
+            transactions << facet_tx
+            logger.debug "Added transaction from forced batch, now have #{transactions.length} total"
+          else
+            logger.debug "Failed to create transaction from forced batch"
+          end
         end
       end
     end
     
-    logger.info "Built block with #{transactions.length} transactions (priority: #{priority_batch ? priority_batch.transaction_count : 0})"
+    # Build informative summary
+    if transactions.length > 0
+      priority_count = priority_batch ? priority_batch.transaction_count : 0
+      forced_count = transactions.length - priority_count
+
+      parts = []
+      parts << "#{priority_count} priority" if priority_count > 0
+      parts << "#{forced_count} permissionless" if forced_count > 0
+
+      logger.info "Block #{l1_block_number}: Built with #{transactions.length} txs (#{parts.join(', ')})"
+    else
+      logger.debug "Block #{l1_block_number}: No transactions to include"
+    end
     
     transactions
   end
@@ -99,14 +119,18 @@ class FacetBlockBuilder
   def collect_permissionless_sources(priority_batch)
     sources = []
     
+    logger.debug "Collecting permissionless sources. Total batches: #{collected.batches.length}"
+    
     # Add all forced batches
     collected.batches.each do |batch|
+      logger.debug "Batch role: #{batch.role}, is_priority: #{batch.is_priority?}, tx_count: #{batch.transaction_count}"
       if batch.is_priority?
         logger.debug "Skipping priority batch with #{batch.transaction_count} txs"
         next  # Skip priority batches
       end
       next if priority_batch && batch.content_hash == priority_batch.content_hash  # Skip selected priority
       
+      logger.debug "Adding forced batch with #{batch.transaction_count} txs to permissionless sources"
       sources << {
         type: :batch,
         l1_tx_index: batch.l1_tx_index,

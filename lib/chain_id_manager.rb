@@ -4,7 +4,7 @@ module ChainIdManager
 
   MAINNET_CHAIN_ID = 1
   SEPOLIA_CHAIN_ID = 11155111
-  HOODI_CHAIN_ID = 13371337
+  HOODI_CHAIN_ID = 560048
 
   FACET_MAINNET_CHAIN_ID = 0xface7
   FACET_SEPOLIA_CHAIN_ID = 0xface7a
@@ -12,10 +12,10 @@ module ChainIdManager
 
   def current_l2_chain_id
     candidate = l2_chain_id_from_l1_network_name(current_l1_network)
-    # according_to_geth = GethDriver.client.call('eth_chainId').to_i(16)
-    # unless according_to_geth == candidate
-    #   raise "Invalid L2 chain ID: #{candidate} (according to geth: #{according_to_geth})"
-    # end
+    according_to_geth = GethDriver.client.call('eth_chainId').to_i(16)
+    unless according_to_geth == candidate
+      raise "Invalid L2 chain ID: #{candidate} (according to geth: #{according_to_geth})"
+    end
     candidate
   end
   memoize :current_l2_chain_id

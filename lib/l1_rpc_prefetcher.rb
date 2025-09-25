@@ -17,19 +17,20 @@ class L1RpcPrefetcher
   end
 
   def ensure_prefetched(from_block)
-    to_block = from_block + @ahead
+    # Check current chain tip first to avoid prefetching beyond what exists
+    latest = @eth.get_block_number
+
+    # Don't prefetch beyond chain tip
+    to_block = [from_block + @ahead, latest].min
+
     # Only create promises for blocks we don't have yet
     blocks_to_fetch = (from_block..to_block).reject { |n| @promises.key?(n) }
 
     return if blocks_to_fetch.empty?
 
-    # Only enqueue a reasonable number at once to avoid overwhelming the promise system
-    max_to_enqueue = [@threads * 10, 50].min
+    Rails.logger.debug "Enqueueing #{blocks_to_fetch.size} blocks: #{blocks_to_fetch.first}..#{blocks_to_fetch.last}"
 
-    to_enqueue = blocks_to_fetch.first(max_to_enqueue)
-    Rails.logger.debug "Enqueueing #{to_enqueue.size} of #{blocks_to_fetch.size} blocks: #{to_enqueue.first}..#{to_enqueue.last}"
-
-    to_enqueue.each { |block_number| enqueue_single(block_number) }
+    blocks_to_fetch.each { |block_number| enqueue_single(block_number) }
   end
 
   def fetch(block_number)
@@ -107,8 +108,6 @@ class L1RpcPrefetcher
     end
   end
 
-  private
-
   def enqueue_single(block_number)
     @promises.compute_if_absent(block_number) do
       Rails.logger.debug "Creating promise for block #{block_number}"
@@ -142,13 +141,50 @@ class L1RpcPrefetcher
 
       eth_block = EthBlock.from_rpc_result(block)
       facet_block = FacetBlock.from_eth_block(eth_block)
-      facet_txs = EthTransaction.facet_txs_from_rpc_results(block, receipts)
+
+      # Use batch collection v2 if enabled, otherwise use v1
+      facet_txs = if SysConfig.facet_batch_v2_enabled?
+        collect_facet_transactions_v2(block, receipts)
+      else
+        EthTransaction.facet_txs_from_rpc_results(block, receipts)
+      end
 
       {
         eth_block: eth_block,
         facet_block: facet_block,
-        facet_txs: facet_txs
+        facet_txs: facet_txs,
+        block_result: block,
+        receipt_result: receipts
       }
     end
+  end
+
+  # Collect Facet transactions using the v2 batch-aware system
+  def collect_facet_transactions_v2(block_result, receipt_result)
+    block_number = block_result['number'].to_i(16)
+
+    # Use the batch collector to find all transactions
+    collector = FacetBatchCollector.new(
+      eth_block: block_result,
+      receipts: receipt_result,
+      blob_provider: blob_provider,
+      logger: Rails.logger
+    )
+
+    collected = collector.call
+
+    # Build the final transaction order
+    builder = FacetBlockBuilder.new(
+      collected: collected,
+      l2_block_gas_limit: SysConfig::L2_BLOCK_GAS_LIMIT,
+      get_authorized_signer: ->(block_num) { PriorityRegistry.instance.authorized_signer(block_num) },
+      logger: Rails.logger
+    )
+
+    builder.ordered_transactions(block_number)
+  end
+
+  def blob_provider
+    @blob_provider ||= BlobProvider.new
   end
 end

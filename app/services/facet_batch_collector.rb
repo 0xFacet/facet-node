@@ -68,9 +68,16 @@ class FacetBatchCollector
     # Deduplicate batches by content hash
     unique_batches = deduplicate_batches(all_batches)
     stats[:deduped_batches] = all_batches.length - unique_batches.length
-    
+
+    # Count total Facet transactions
+    total_txs = single_txs.length
+    unique_batches.each do |batch|
+      total_txs += batch.transactions.length
+    end
+    stats[:total_transactions] = total_txs
+
     log_stats(stats) if stats.values.any?(&:positive?)
-    
+
     CollectorResult.new(
       single_txs: single_txs,
       batches: unique_batches,
@@ -212,6 +219,47 @@ class FacetBatchCollector
   end
   
   def log_stats(stats)
-    logger.info "FacetBatchCollector stats for block #{eth_block['number'].to_i(16)}: #{stats.inspect}"
+    block_num = eth_block['number'].to_i(16)
+
+    # Build a more readable summary
+    summary_parts = []
+
+    # Report on L1 transactions
+    tx_count = eth_block['transactions']&.length || 0
+    summary_parts << "#{tx_count} L1 txs"
+
+    # Report on blobs if any
+    if stats[:batches_blobs] > 0 || stats[:missing_blobs] > 0
+      summary_parts << "#{stats[:batches_blobs]} blob batches"
+      summary_parts << "#{stats[:missing_blobs]} missing blobs" if stats[:missing_blobs] > 0
+    end
+
+    # Report on calldata batches
+    if stats[:batches_calldata] > 0
+      summary_parts << "#{stats[:batches_calldata]} calldata batches"
+    end
+
+    # Report on V1 singles
+    total_singles = stats[:single_txs_calldata] + stats[:single_txs_events]
+    if total_singles > 0
+      summary_parts << "#{total_singles} V1 singles"
+    end
+
+    # Report deduplication if any
+    if stats[:deduped_batches] > 0
+      summary_parts << "#{stats[:deduped_batches]} deduped"
+    end
+
+    # Total Facet transactions found
+    total_facet_txs = stats[:total_transactions]
+    if total_facet_txs && total_facet_txs > 0
+      summary_parts << "→ #{total_facet_txs} Facet txs"
+    end
+
+    if summary_parts.any?
+      logger.info "Block #{block_num}: #{summary_parts.join(', ')}"
+    else
+      logger.info "Block #{block_num}: No Facet activity"
+    end
   end
 end
