@@ -66,10 +66,17 @@ module FctMintCalculatorAlbatross
     new_rate = compute_new_rate(facet_block, prev_rate, cumulative_l1_data_gas)
     
     facet_txs.each do |tx|
-      tx.mint = tx.l1_data_gas_used(facet_block.number) * new_rate
+      # Only FacetTransaction objects have mint field
+      # StandardL2Transaction objects don't mint
+      if tx.is_a?(FacetTransaction)
+        tx.mint = tx.l1_data_gas_used(facet_block.number) * new_rate
+      end
     end
     
-    batch_l1_data_gas = facet_txs.sum { |tx| tx.l1_data_gas_used(facet_block.number) }
+    batch_l1_data_gas = facet_txs.sum do |tx|
+      # Only FacetTransaction objects have l1_data_gas_used
+      tx.is_a?(FacetTransaction) ? tx.l1_data_gas_used(facet_block.number) : 0
+    end
     
     if is_first_block_in_period?(facet_block)
       new_cumulative_l1_data_gas = batch_l1_data_gas

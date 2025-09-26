@@ -13,12 +13,13 @@ RSpec.describe L1RpcPrefetcher do
   end
   
   describe '#fetch' do
-    let(:block_data) { { 'number' => '0x1', 'hash' => '0x123' } }
+    let(:block_data) { { 'number' => '0x1', 'hash' => '0x123', "transactions" => [] } }
     let(:receipts_data) { [] }
     
     before do
       allow(ethereum_client).to receive(:get_block).and_return(block_data)
       allow(ethereum_client).to receive(:get_transaction_receipts).and_return(receipts_data)
+      allow(ethereum_client).to receive(:get_block_number).and_return(10000000)
       allow(EthBlock).to receive(:from_rpc_result).and_return(instance_double(EthBlock, number: 1))
       allow(FacetBlock).to receive(:from_eth_block).and_return(instance_double(FacetBlock))
       allow(EthTransaction).to receive(:facet_txs_from_rpc_results).and_return([])

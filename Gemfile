@@ -76,3 +76,5 @@ gem 'ostruct'
 gem "oj", "~> 3.16"
 
 gem "retriable", "~> 3.1"
+
+gem "colorize", "~> 1.1"

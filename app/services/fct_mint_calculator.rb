@@ -98,7 +98,7 @@ module FctMintCalculator
   end
 
   # --- Core Logic ---
-  sig { params(facet_txs: T::Array[FacetTransaction], facet_block: FacetBlock).returns(MintPeriod) }
+  sig { params(facet_txs: T.untyped, facet_block: FacetBlock).returns(MintPeriod) }
   def assign_mint_amounts(facet_txs, facet_block)
     # Use legacy mint calculator before the Bluebird fork block
     if facet_block.number < SysConfig.bluebird_fork_block_number

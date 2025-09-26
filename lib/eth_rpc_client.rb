@@ -45,6 +45,13 @@ class EthRpcClient
     ).to_i(16)
   end
   
+  def get_transaction_count(address, block_number = "latest")
+    query_api(
+      method: 'eth_getTransactionCount',
+      params: [address, block_number]
+    ).to_i(16)
+  end
+  
   def get_chain_id
     query_api(method: 'eth_chainId').to_i(16)
   end
@@ -102,7 +109,7 @@ class EthRpcClient
   def get_block_number
     query_api(method: 'eth_blockNumber').to_i(16)
   end
-
+  
   def query_api(method = nil, params = [], **kwargs)
     if kwargs.present?
       method = kwargs[:method]

@@ -5,6 +5,15 @@ module FacetTransactionHelper
     
     # Convert transaction params to EthTransaction objects
     eth_transactions = transactions.map.with_index do |tx_params, index|
+      to_address =
+        if tx_params[:to_address]
+          tx_params[:to_address].is_a?(Address20) ? tx_params[:to_address] : Address20.from_hex(tx_params[:to_address])
+        elsif tx_params[:events].present?
+          Address20.from_hex("0x" + "2" * 40)
+        else
+          EthTransaction::FACET_INBOX_ADDRESS
+        end
+      
       EthTransaction.new(
         block_hash: Hash32.from_hex(bytes_stub(rand)),
         block_number: current_max_eth_block.number + 1,
@@ -14,12 +23,12 @@ module FacetTransactionHelper
         input: ByteString.from_hex(tx_params[:input]),
         chain_id: 1,
         from_address: Address20.from_hex(tx_params[:from_address] || "0x" + "2" * 40),
-        to_address: EthTransaction::FACET_INBOX_ADDRESS,
+        to_address: to_address,
         status: 1,
         logs: tx_params[:events] || []
       )
     end
-
+    
     rpc_results = eth_txs_to_rpc_result(eth_transactions)
     block_result = rpc_results[0].merge('parentHash' => current_max_eth_block.block_hash.to_hex)
     receipt_result = rpc_results[1]
@@ -27,13 +36,21 @@ module FacetTransactionHelper
     # Create the mock response for the prefetcher
     eth_block = EthBlock.from_rpc_result(block_result)
     facet_block = FacetBlock.from_eth_block(eth_block)
-    facet_txs = EthTransaction.facet_txs_from_rpc_results(block_result, receipt_result)
+
+    # Use batch collection v2 if enabled, otherwise use v1
+    facet_txs = if SysConfig.facet_batch_v2_enabled?
+      L1RpcPrefetcher.send(:allocate).collect_facet_transactions_v2(block_result, receipt_result)
+    else
+      EthTransaction.facet_txs_from_rpc_results(block_result, receipt_result)
+    end
 
     mock_prefetcher_response = {
       error: nil,
       eth_block: eth_block,
       facet_block: facet_block,
-      facet_txs: facet_txs
+      facet_txs: facet_txs,
+      block_result: block_result,
+      receipt_result: receipt_result
     }
 
     # Mock the prefetcher
@@ -58,8 +75,12 @@ module FacetTransactionHelper
     latest_l2_block = EthRpcClient.l2.get_block("latest", true)
     # binding.irb
     # Return array of receipts
+    # NOTE: This only returns receipts for V1 single transactions that have a direct sourceHash mapping
+    # Batch transactions (StandardL2Transaction) don't have a 1:1 mapping with L1 transactions
+    # and should be queried directly from the L2 block if needed
     res = eth_transactions.map do |eth_tx|
       tx_in_geth = latest_l2_block['transactions'].find do |tx|
+        next false if tx['sourceHash'].nil?
         eth_tx.facet_tx_source_hash == Hash32.from_hex(tx['sourceHash'])
       end
       

@@ -37,7 +37,7 @@ Rails.application.configure do
   end
   
   config.logger = ActiveSupport::Logger.new(STDOUT)
-  config.log_level = :info
+  config.log_level = :debug
 
   # Active Storage not in use.
 

@@ -282,11 +282,14 @@ class EthBlockImporter
       raise BlockNotReadyToImportError.new("Block #{block_number} not yet available on L1")
     end
 
+    # Extract data from prefetcher response
     eth_block = response[:eth_block]
     facet_block = response[:facet_block]
     facet_txs = response[:facet_txs]
 
-    facet_txs.each { |tx| tx.facet_block = facet_block }
+    facet_txs.each do |facet_tx|
+      facet_tx.facet_block = facet_block
+    end
 
     # Check for reorg by validating parent hash
     parent_eth_block = eth_block_cache[block_number - 1]

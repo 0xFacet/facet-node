@@ -1,6 +1,6 @@
 services:
   geth:
-    image: ghcr.io/0xfacet/facet-geth:v2.0.1
+    image: ghcr.io/0xfacet/facet-geth:batches
     environment:
       JWT_SECRET: ${JWT_SECRET}
       GENESIS_FILE: ${GENESIS_FILE}
@@ -11,8 +11,9 @@ services:
       CACHE_SIZE: ${GETH_CACHE_SIZE:-10000}
     volumes:
       - geth-data:/root/ethereum
-    ports:
-      - "8545:8545"
+    expose:
+      - "8545"
+      - "8551"
     healthcheck:
       test: ["CMD-SHELL", "geth attach --exec 'eth.blockNumber' http://localhost:8545"]
       interval: 30s
@@ -21,7 +22,7 @@ services:
       start_period: 10s
 
   node:
-    image: ghcr.io/0xfacet/facet-node:v2.0.1
+    image: ghcr.io/0xfacet/facet-node:batches
     environment:
       JWT_SECRET: ${JWT_SECRET}
       L1_NETWORK: ${L1_NETWORK}
@@ -32,9 +33,56 @@ services:
       BLUEBIRD_TIMESTAMP: ${BLUEBIRD_TIMESTAMP:-1754484539}
       L1_PREFETCH_FORWARD: ${L1_PREFETCH_FORWARD:-200}
       L1_PREFETCH_THREADS: ${L1_PREFETCH_THREADS:-10}
+      BLUEBIRD_IMMEDIATE_FORK_MAX_SUPPLY_ETHER: ${BLUEBIRD_IMMEDIATE_FORK_MAX_SUPPLY_ETHER:-1_500_000_000}
+      ETHEREUM_BEACON_NODE_API_BASE_URL: ${ETHEREUM_BEACON_NODE_API_BASE_URL}
+      FACET_BATCH_V2_ENABLED: ${FACET_BATCH_V2_ENABLED:-true}
+    depends_on:
+      geth:
+        condition: service_healthy
+
+  sequencer:
+    image: ghcr.io/0xfacet/facet-sequencer:batches
+    environment:
+      # L1 Configuration
+      L1_RPC_URL: ${L1_RPC_URL}
+      L1_CHAIN_ID: ${L1_CHAIN_ID:-560048}  # Hoodi by default
+
+      # L2 Configuration (points to internal Geth)
+      L2_RPC_URL: http://geth:8545
+      # L2_CHAIN_ID is auto-discovered from Geth
+
+      # Sequencer Configuration
+      PRIVATE_KEY: ${SEQUENCER_PRIVATE_KEY}
+      DB_PATH: /data/sequencer.db
+      PORT: 8545  # Main RPC port
+      METRICS_PORT: 9090
+
+      # DA Builder Configuration (optional)
+      USE_DA_BUILDER: ${USE_DA_BUILDER:-false}
+      DA_BUILDER_URL: ${DA_BUILDER_URL:-}
+      FALLBACK_TO_DIRECT: ${FALLBACK_TO_DIRECT:-true}
+
+      # Batch Configuration
+      MAX_TX_PER_BATCH: ${MAX_TX_PER_BATCH:-500}
+      MAX_BATCH_SIZE: ${MAX_BATCH_SIZE:-131072}
+      BATCH_INTERVAL_MS: ${BATCH_INTERVAL_MS:-250}
+      MAX_PER_SENDER: ${MAX_PER_SENDER:-10}
+      MAX_PENDING_TXS: ${MAX_PENDING_TXS:-10000}
+    volumes:
+      - sequencer-data:/data
+    ports:
+      - "8545:8545"
+      # - "9090:9090"  # Metrics endpoint
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8545/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
     depends_on:
       geth:
         condition: service_healthy
 
 volumes:
   geth-data:
+  sequencer-data:

@@ -102,6 +102,7 @@ RSpec.describe 'Reorg followed by duplicate-timestamp rejection', slow: true do
 
     hash0 = latest_l2['hash']
     zero_root = '0x' + '00' * 32
+    
     eth_genesis = EthBlock.from_rpc_result(
       build_block(number: 0, hash: hash0, parent_hash: '0x' + '00' * 32, timestamp: base_ts, parent_beacon_root: zero_root)
     )
@@ -113,6 +114,7 @@ RSpec.describe 'Reorg followed by duplicate-timestamp rejection', slow: true do
     importer.ethereum_client = double('EthRpcClient')
     importer.geth_driver = GethDriver
     importer.prefetcher = build_prefetcher(prefetch_store)
+    
     allow(importer).to receive(:current_block_number).and_return(2)
 
     importer

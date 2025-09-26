@@ -1,0 +1,45 @@
+{
+  "name": "@facet/sequencer",
+  "version": "0.1.0",
+  "description": "Lightweight Facet transaction sequencer",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "npm run typecheck && tsc",
+    "prebuild": "npm run lint",
+    "start": "node dist/index.js",
+    "test": "vitest",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext .ts --max-warnings 5",
+    "migrate": "tsx src/db/migrate.ts",
+    "test:send": "tsx scripts/test-transaction.ts",
+    "test:db": "tsx scripts/inspect-db.ts",
+    "test:e2e": "tsx scripts/test-e2e.ts",
+    "mint": "tsx scripts/mint-eth.ts"
+  },
+  "dependencies": {
+    "viem": "2.37.5",
+    "c-kzg": "4.1.0",
+    "better-sqlite3": "12.4.1",
+    "fastify": "5.6.0",
+    "@fastify/cors": "11.1.0",
+    "p-queue": "8.1.1",
+    "dotenv": "17.2.2",
+    "pino": "9.9.5",
+    "pino-pretty": "13.1.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "7.6.13",
+    "@types/node": "^20.11.0",
+    "typescript": "5.9.2",
+    "tsx": "4.20.5",
+    "vitest": "3.2.4",
+    "@typescript-eslint/eslint-plugin": "8.43.0",
+    "@typescript-eslint/parser": "8.43.0",
+    "eslint": "9.35.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
