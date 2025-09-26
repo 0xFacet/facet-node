@@ -164,8 +164,8 @@ export class SequencerAPI {
       daBuilderStatus = {
         enabled: true,
         url: this.config.daBuilderUrl,
-        lastSuccessMs: this.lastDABuilderSuccess ? timeSinceLastSuccess : null,
-        healthy: this.lastDABuilderSuccess === 0 || timeSinceLastSuccess < 600000 // 10 min
+        lastSuccessMs: this.lastDABuilderSuccess > 0 ? timeSinceLastSuccess : null,
+        healthy: this.lastDABuilderSuccess > 0 && timeSinceLastSuccess < 600000 // 10 min
       };
     }
 

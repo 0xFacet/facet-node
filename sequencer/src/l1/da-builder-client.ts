@@ -30,7 +30,6 @@ export class DABuilderClient {
 
   constructor(
     private daBuilderUrl: string,
-    private proposerAddress: Hex,
     private chainId: number,
     private account: PrivateKeyAccount,
     private publicClient: PublicClient

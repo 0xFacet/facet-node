@@ -13,7 +13,7 @@ export interface Config {
 
   // L2 Connection
   l2RpcUrl: string;
-  l2ChainId: string;
+  l2ChainId?: string; // Optional - will be discovered from L2 RPC if not provided
 
   // Facet Configuration
   facetMagicPrefix: Hex;
@@ -55,7 +55,7 @@ export function loadConfig(): Config {
     
     // L2 Connection
     l2RpcUrl: process.env.L2_RPC_URL || 'http://localhost:8546',
-    l2ChainId: process.env.L2_CHAIN_ID!,
+    l2ChainId: process.env.L2_CHAIN_ID, // Optional - discovered from L2 RPC if not set
     
     // Facet Configuration
     facetMagicPrefix: process.env.FACET_MAGIC_PREFIX as Hex,
@@ -102,7 +102,6 @@ export function loadConfig(): Config {
     if (!config.daBuilderUrl) {
       throw new Error('DA_BUILDER_URL is required when USE_DA_BUILDER is true');
     }
-    // Note: proposerAddress not actually used - EOA with EIP-7702 code is used instead
   }
 
   return config;

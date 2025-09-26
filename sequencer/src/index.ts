@@ -60,16 +60,23 @@ class Sequencer {
       });
     }
     
+    // Query L2 chain ID from Geth
+    const l2Client = createPublicClient({
+      transport: http(this.config.l2RpcUrl)
+    });
+    const l2ChainId = await l2Client.getChainId();
+    logger.info({ l2ChainId }, 'Discovered L2 chain ID from Geth');
+
     // Define L2 chain
     const l2Chain = defineChain({
-      id: parseInt(this.config.l2ChainId, 16),
+      id: l2ChainId,
       name: 'Facet',
       nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
       rpcUrls: {
         default: { http: [this.config.l2RpcUrl] }
       }
     });
-    
+
     // Create L1 public client for BatchMaker
     const l1PublicClient = createPublicClient({
       chain: l1Chain,
@@ -81,7 +88,7 @@ class Sequencer {
     this.batchMaker = new BatchMaker(
       this.db,
       l1PublicClient,
-      this.config.l2ChainId
+      l2ChainId.toString()
     );
 
     // Select poster implementation based on config
@@ -92,8 +99,7 @@ class Sequencer {
         l1Chain,
         this.config.privateKey,
         this.config.l1RpcUrl,
-        this.config.daBuilderUrl!,
-        this.config.proposerAddress!
+        this.config.daBuilderUrl!
       );
     } else {
       logger.info('Using direct poster');

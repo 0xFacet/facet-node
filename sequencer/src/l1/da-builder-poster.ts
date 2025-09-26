@@ -25,8 +25,7 @@ export class DABuilderPoster implements Poster {
     private chain: Chain,
     privateKey: Hex,
     rpcUrl: string,
-    daBuilderUrl: string,
-    proposerAddress: Hex
+    daBuilderUrl: string
   ) {
     this.account = privateKeyToAccount(privateKey);
 
@@ -37,7 +36,6 @@ export class DABuilderPoster implements Poster {
 
     this.daBuilderClient = new DABuilderClient(
       daBuilderUrl,
-      proposerAddress,
       this.chain.id,
       this.account,
       this.publicClient
