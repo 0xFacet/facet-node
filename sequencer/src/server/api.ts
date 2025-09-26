@@ -17,7 +17,6 @@ export class SequencerAPI {
   private app: FastifyInstance;
   private ingress: IngressServer;
   private l2RpcUrl: string;
-  private lastDABuilderSuccess: number = 0;
 
   constructor(
     private db: DatabaseService,
@@ -160,12 +159,11 @@ export class SequencerAPI {
     // Check DA Builder health if enabled
     let daBuilderStatus = undefined;
     if (this.config.useDABuilder) {
-      const timeSinceLastSuccess = now - this.lastDABuilderSuccess;
       daBuilderStatus = {
         enabled: true,
         url: this.config.daBuilderUrl,
-        lastSuccessMs: this.lastDABuilderSuccess > 0 ? timeSinceLastSuccess : null,
-        healthy: this.lastDABuilderSuccess > 0 && timeSinceLastSuccess < 600000 // 10 min
+        lastSuccessMs: null,  // TODO: implement actual health monitoring
+        healthy: true  // TODO: implement actual health check
       };
     }
 
@@ -179,10 +177,6 @@ export class SequencerAPI {
     };
   }
 
-  // Method to update DA Builder success timestamp (called by DABuilderPoster)
-  public updateDABuilderSuccess(): void {
-    this.lastDABuilderSuccess = Date.now();
-  }
   
   private async getStats(): Promise<any> {
     const database = this.db.getDatabase();
