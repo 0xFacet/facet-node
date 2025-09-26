@@ -17,6 +17,7 @@ export class SequencerAPI {
   private app: FastifyInstance;
   private ingress: IngressServer;
   private l2RpcUrl: string;
+  private lastDABuilderSuccess: number = 0;
 
   constructor(
     private db: DatabaseService,
@@ -143,26 +144,44 @@ export class SequencerAPI {
   
   private async checkHealth(): Promise<any> {
     const database = this.db.getDatabase();
-    
+
     const stats = database.prepare(`
-      SELECT 
+      SELECT
         (SELECT COUNT(*) FROM transactions WHERE state IN ('queued', 'requeued')) as queued,
         (SELECT COUNT(*) FROM batches WHERE state IN ('sealed', 'submitted')) as pending_batches,
         (SELECT MAX(confirmed_at) FROM post_attempts WHERE status = 'mined') as last_confirmation
     `).get() as any;
-    
+
     const now = Date.now();
-    const healthy = 
+    const healthy =
       stats.queued < this.config.maxPendingTxs &&
       (!stats.last_confirmation || (now - stats.last_confirmation) < 300000);
-    
+
+    // Check DA Builder health if enabled
+    let daBuilderStatus = undefined;
+    if (this.config.useDABuilder) {
+      const timeSinceLastSuccess = now - this.lastDABuilderSuccess;
+      daBuilderStatus = {
+        enabled: true,
+        url: this.config.daBuilderUrl,
+        lastSuccessMs: this.lastDABuilderSuccess ? timeSinceLastSuccess : null,
+        healthy: this.lastDABuilderSuccess === 0 || timeSinceLastSuccess < 600000 // 10 min
+      };
+    }
+
     return {
-      healthy,
+      healthy: healthy && (!daBuilderStatus || daBuilderStatus.healthy),
       uptime: process.uptime(),
       queuedTxs: stats.queued,
       pendingBatches: stats.pending_batches,
-      lastL1Confirmation: stats.last_confirmation
+      lastL1Confirmation: stats.last_confirmation,
+      daBuilder: daBuilderStatus
     };
+  }
+
+  // Method to update DA Builder success timestamp (called by DABuilderPoster)
+  public updateDABuilderSuccess(): void {
+    this.lastDABuilderSuccess = Date.now();
   }
   
   private async getStats(): Promise<any> {

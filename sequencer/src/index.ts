@@ -1,11 +1,13 @@
 import { DatabaseService } from './db/schema.js';
 import { SequencerAPI } from './server/api.js';
 import { BatchMaker } from './batch/maker.js';
-import { L1Poster } from './l1/poster.js';
+import type { Poster } from './l1/poster-interface.js';
+import { DirectPoster } from './l1/direct-poster.js';
+import { DABuilderPoster } from './l1/da-builder-poster.js';
 import { InclusionMonitor } from './l1/monitor.js';
 import { loadConfig } from './config/config.js';
 import { logger } from './utils/logger.js';
-import { defineChain } from 'viem';
+import { defineChain, createPublicClient, http } from 'viem';
 import { holesky, mainnet } from 'viem/chains';
 import { mkdir } from 'fs/promises';
 import { dirname } from 'path';
@@ -14,7 +16,7 @@ class Sequencer {
   private db!: DatabaseService;
   private api!: SequencerAPI;
   private batchMaker!: BatchMaker;
-  private poster!: L1Poster;
+  private poster!: Poster;
   private monitor!: InclusionMonitor;
   private config = loadConfig();
   private isRunning = false;
@@ -68,19 +70,40 @@ class Sequencer {
       }
     });
     
+    // Create L1 public client for BatchMaker
+    const l1PublicClient = createPublicClient({
+      chain: l1Chain,
+      transport: http(this.config.l1RpcUrl)
+    });
+
     // Initialize components
     this.api = new SequencerAPI(this.db, this.config);
     this.batchMaker = new BatchMaker(
       this.db,
-      null as any, // L1 client will be set by poster
+      l1PublicClient,
       this.config.l2ChainId
     );
-    this.poster = new L1Poster(
-      this.db,
-      l1Chain,
-      this.config.privateKey,
-      this.config.l1RpcUrl
-    );
+
+    // Select poster implementation based on config
+    if (this.config.useDABuilder) {
+      logger.info('Using DA Builder poster');
+      this.poster = new DABuilderPoster(
+        this.db,
+        l1Chain,
+        this.config.privateKey,
+        this.config.l1RpcUrl,
+        this.config.daBuilderUrl!,
+        this.config.proposerAddress!
+      );
+    } else {
+      logger.info('Using direct poster');
+      this.poster = new DirectPoster(
+        this.db,
+        l1Chain,
+        this.config.privateKey,
+        this.config.l1RpcUrl
+      );
+    }
     this.monitor = new InclusionMonitor(
       this.db,
       this.config.l1RpcUrl,

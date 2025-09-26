@@ -189,30 +189,36 @@ export class IngressServer {
   
   async getTransactionStatus(hash: Hex): Promise<any> {
     const tx = this.db.getDatabase().prepare(`
-      SELECT 
+      SELECT
         t.state,
         t.batch_id,
         t.l2_block_number,
         t.drop_reason,
         b.state as batch_state,
         pa.l1_tx_hash,
+        pa.da_builder_request_id,
         pa.block_number as l1_block,
         pa.status as attempt_status
       FROM transactions t
       LEFT JOIN batches b ON t.batch_id = b.id
-      LEFT JOIN post_attempts pa ON b.id = pa.batch_id AND pa.status = 'mined'
+      LEFT JOIN post_attempts pa ON b.id = pa.batch_id AND pa.status IN ('pending', 'mined')
       WHERE t.hash = ?
     `).get(Buffer.from(hash.slice(2), 'hex')) as any;
-    
+
     if (!tx) {
       return { status: 'unknown' };
     }
-    
+
+    // Derive submission mode from presence of da_builder_request_id
+    const submissionMode = tx.da_builder_request_id ? 'da_builder' : 'direct';
+
     return {
       status: tx.state,
       batchId: tx.batch_id,
       batchState: tx.batch_state,
+      submissionMode: tx.batch_id ? submissionMode : undefined,
       l1TxHash: tx.l1_tx_hash ? '0x' + tx.l1_tx_hash.toString('hex') : undefined,
+      daRequestId: tx.da_builder_request_id || undefined,
       l1Block: tx.l1_block,
       l2Block: tx.l2_block_number,
       dropReason: tx.drop_reason
