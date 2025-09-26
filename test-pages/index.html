@@ -1,0 +1,696 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sequencer Test (MetaMask)</title>
+<style>
+  body {
+    font-family: ui-monospace, Menlo, Monaco, 'Cascadia Mono', monospace;
+    max-width: 480px;
+    margin: 40px auto;
+    padding: 20px;
+    background: #1a1b26;
+    color: #a9b1d6;
+  }
+  h2 {
+    color: #7aa2f7;
+    font-size: 18px;
+    margin-bottom: 20px;
+    text-align: center;
+  }
+  label {
+    display: block;
+    font-size: 11px;
+    text-transform: uppercase;
+    color: #565f89;
+    margin: 12px 0 4px;
+    letter-spacing: 0.5px;
+  }
+  input, button {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px 12px;
+    margin: 0 0 4px 0;
+    font-size: 14px;
+    font-family: inherit;
+    border-radius: 4px;
+    border: 1px solid #414868;
+    background: #24283b;
+    color: #c0caf5;
+  }
+  input:focus {
+    outline: none;
+    border-color: #7aa2f7;
+    background: #1a1b26;
+  }
+  button {
+    cursor: pointer;
+    background: #7aa2f7;
+    color: #1a1b26;
+    font-weight: 600;
+    border: none;
+    margin-top: 8px;
+  }
+  button:hover { background: #7dcfff; }
+  button:disabled {
+    background: #414868;
+    color: #565f89;
+    cursor: not-allowed;
+  }
+  .quick {
+    display: flex;
+    gap: 4px;
+    margin-top: 2px;
+  }
+  .quick button {
+    flex: 1;
+    padding: 6px;
+    font-size: 11px;
+    margin: 0;
+    background: #414868;
+    color: #a9b1d6;
+  }
+  .quick button:hover { background: #565f89; }
+  pre {
+    background: #1a1b26;
+    border: 1px solid #414868;
+    color: #a9b1d6;
+    padding: 12px;
+    border-radius: 4px;
+    min-height: 120px;
+    white-space: pre-wrap;
+    font-size: 12px;
+    line-height: 1.4;
+    margin-top: 16px;
+  }
+  .success { color: #9ece6a; }
+  .error { color: #f7768e; }
+  .info { color: #7dcfff; }
+  .pending { color: #e0af68; }
+  .connected {
+    background: #9ece6a;
+    color: #1a1b26;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    display: inline-block;
+    margin-left: 8px;
+  }
+</style>
+<h2>🔧 Sequencer Test via MetaMask</h2>
+
+<label>Chain ID</label>
+<input id="chainIdHex" value="0xface7b" placeholder="0xface7b" />
+
+<label>Sequencer RPC URL</label>
+<input id="rpcUrl" value="http://localhost:7777" />
+<div class="quick">
+  <button onclick="setRpc('http://localhost:7777')">:7777</button>
+  <button onclick="setRpc('http://localhost:8545')">:8545</button>
+  <button onclick="setRpc('http://localhost:8546')">:8546</button>
+</div>
+
+<label>To Address</label>
+<input id="to" placeholder="0x... (leave blank to send to self)" />
+<div class="quick">
+  <button onclick="setTo('')">Self</button>
+  <button onclick="setTo('0x0000000000000000000000000000000000000000')">Burn</button>
+  <button onclick="setTo('0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266')">Anvil #0</button>
+</div>
+
+<label>Amount (ETH)</label>
+<input id="amount" value="0.001" />
+<div class="quick">
+  <button onclick="setAmount('0')">0 ETH</button>
+  <button onclick="setAmount('0.001')">0.001</button>
+  <button onclick="setAmount('0.01')">0.01</button>
+  <button onclick="setAmount('0.1')">0.1</button>
+</div>
+
+<label>Max Priority Fee (Gwei)</label>
+<input id="priorityFee" value="1" />
+<div class="quick">
+  <button onclick="setPriority('0.01')">0.01</button>
+  <button onclick="setPriority('1')">1</button>
+  <button onclick="setPriority('10')">10</button>
+  <button onclick="setPriority('100')">100</button>
+</div>
+
+<label>Data (hex)</label>
+<input id="data" value="0x" placeholder="0x..." />
+
+<button id="connect" onclick="connectWallet()">
+  🦊 Connect MetaMask
+</button>
+
+<button id="send" onclick="sendTx()" disabled>
+  📤 Send Transaction
+</button>
+
+<button id="mint" onclick="mintL2Eth()" disabled>
+  💰 Mint L2 ETH (via L1 deposit)
+</button>
+
+
+<pre id="log"></pre>
+
+<script type="module">
+import { createWalletClient, custom, parseEther, parseGwei, toHex, toRlp, concatHex, formatEther, createPublicClient, http } from "https://esm.sh/viem@2"
+
+const $ = id => document.getElementById(id)
+const log = (m, type = '') => {
+  const el = $("log")
+  const time = new Date().toTimeString().split(' ')[0]
+  const cls = type ? ` class="${type}"` : ''
+  // Check if message contains HTML (for links)
+  if (m.includes('<a href=')) {
+    el.innerHTML += `<span style="color:#565f89">${time}</span> ${m}\n`
+  } else {
+    el.innerHTML += `<span style="color:#565f89">${time}</span> <span${cls}>${m}</span>\n`
+  }
+  el.scrollTop = el.scrollHeight
+}
+
+// Quick setters
+window.setRpc = (url) => { $("rpcUrl").value = url; log(`RPC: ${url}`, 'info') }
+window.setTo = (addr) => { $("to").value = addr; log(`To: ${addr || 'self'}`, 'info') }
+window.setAmount = (amt) => { $("amount").value = amt; log(`Amount: ${amt} ETH`, 'info') }
+window.setPriority = (gwei) => { $("priorityFee").value = gwei; log(`Priority: ${gwei} gwei`, 'info') }
+
+// EIP-6963 wallet discovery
+let providers = []
+window.addEventListener("eip6963:announceProvider", (e) => {
+  const d = e.detail
+  if (!providers.find(x => x.info.uuid === d.info.uuid)) {
+    providers.push(d)
+    log(`Found wallet: ${d.info.name}`, 'info')
+  }
+})
+window.dispatchEvent(new Event("eip6963:requestProvider"))
+
+function getProvider() {
+  return providers[0]?.provider || window.ethereum || null
+}
+
+let connectedAccount = null
+
+async function ensureChain(p, chainIdHex, rpcUrl) {
+  try {
+    // Try to switch first
+    await p.request({
+      method: "wallet_switchEthereumChain",
+      params: [{ chainId: chainIdHex }]
+    })
+    log(`Switched to chain ${chainIdHex}`, 'success')
+  } catch (switchError) {
+    // Chain doesn't exist, add it
+    if (switchError.code === 4902) {
+      try {
+        await p.request({
+          method: "wallet_addEthereumChain",
+          params: [{
+            chainId: chainIdHex,
+            chainName: `Facet L2 (${chainIdHex})`,
+            nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+            rpcUrls: [rpcUrl],
+            blockExplorerUrls: ["http://localhost/"]
+          }],
+        })
+        log(`Added chain ${chainIdHex}`, 'success')
+      } catch (addError) {
+        throw new Error(`Failed to add chain: ${addError.message}`)
+      }
+    } else {
+      throw switchError
+    }
+  }
+}
+
+window.connectWallet = async () => {
+  try {
+    const p = getProvider()
+    if (!p) {
+      log("No wallet found! Install MetaMask.", 'error')
+      return
+    }
+
+    log("Connecting wallet...", 'info')
+    const chainIdHex = $("chainIdHex").value.trim()
+    const rpcUrl = $("rpcUrl").value.trim()
+
+    // Ensure chain is added/selected
+    await ensureChain(p, chainIdHex, rpcUrl)
+
+    // Request accounts
+    const accounts = await p.request({ method: "eth_requestAccounts" })
+    connectedAccount = accounts[0]
+
+    log(`Connected: ${connectedAccount}`, 'success')
+    $("connect").innerHTML = `🦊 ${connectedAccount.slice(0, 6)}...${connectedAccount.slice(-4)}`
+    $("send").disabled = false
+    $("mint").disabled = false
+
+    // Get balance
+    const balanceHex = await p.request({
+      method: "eth_getBalance",
+      params: [connectedAccount, "latest"]
+    })
+    const balance = (parseInt(balanceHex, 16) / 1e18).toFixed(4)
+    log(`Balance: ${balance} ETH`, 'info')
+
+    // Get nonce
+    const nonceHex = await p.request({
+      method: "eth_getTransactionCount",
+      params: [connectedAccount, "latest"]
+    })
+    const nonce = parseInt(nonceHex, 16)
+    log(`Nonce: ${nonce}`, 'info')
+
+  } catch (e) {
+    log(`Connect failed: ${e.message}`, 'error')
+  }
+}
+
+window.sendTx = async () => {
+  try {
+    const p = getProvider()
+    if (!p || !connectedAccount) {
+      log("Connect wallet first!", 'error')
+      return
+    }
+
+    const chainIdHex = $("chainIdHex").value.trim()
+    const rpcUrl = $("rpcUrl").value.trim()
+    const to = $("to").value.trim() || connectedAccount
+    const amt = $("amount").value.trim()
+    const priorityFeeGwei = $("priorityFee").value.trim() || "1"
+    let data = $("data").value.trim() || "0x"
+
+    if (!data.startsWith("0x")) {
+      log("Data must start with 0x", 'error')
+      return
+    }
+
+    log(`Preparing tx to ${to === connectedAccount ? 'self' : to.slice(0, 10) + '...'}`, 'info')
+
+    // Make sure we're on the right chain
+    await ensureChain(p, chainIdHex, rpcUrl)
+
+    // Create wallet client and send
+    const wc = createWalletClient({
+      transport: custom(p),
+      chain: { id: parseInt(chainIdHex, 16) }
+    })
+
+    // Show loading state
+    log("⏳ Waiting for signature...", 'pending')
+    $("send").disabled = true
+    $("send").textContent = "⏳ Signing..."
+
+    const startTime = Date.now()
+    const hash = await wc.sendTransaction({
+      account: connectedAccount,
+      to,
+      value: amt ? parseEther(amt) : 0n,
+      data,
+      maxPriorityFeePerGas: parseGwei(priorityFeeGwei),
+      maxFeePerGas: parseGwei(priorityFeeGwei) * 2n, // 2x priority as max
+      // Let MetaMask/sequencer figure out gas limit, nonce, etc
+    })
+    const submitTime = ((Date.now() - startTime) / 1000).toFixed(1)
+
+    // Show transaction submitted with nice formatting
+    log(``, '')  // blank line for spacing
+    log(`┌──────────────────────────────────────────────────────┐`, 'info')
+    log(`│ ✅ Transaction Submitted to Sequencer                │`, 'success')
+    log(`├──────────────────────────────────────────────────────┤`, 'info')
+    log(`│ Hash: ${hash.slice(0, 10)}...${hash.slice(-8)}`, 'info')
+    log(`│ Time: ${submitTime}s`, 'info')
+    log(`└──────────────────────────────────────────────────────┘`, 'info')
+
+    // Add clickable link to block explorer
+    const explorerUrl = `http://localhost/tx/${hash}`
+    log(`🔗 <a href="${explorerUrl}" target="_blank" style="color: #7dcfff; text-decoration: underline;">View on Explorer</a>`, '')
+    log(``, '')  // blank line for spacing
+
+    // Check immediate status from sequencer
+    await checkStatus(rpcUrl, hash)
+
+    // Poll for receipt with enhanced display
+    pollReceipt(rpcUrl, hash)
+
+  } catch (e) {
+    log(`TX failed: ${e.message}`, 'error')
+  } finally {
+    $("send").disabled = false
+    $("send").textContent = "📤 Send Transaction"
+  }
+}
+
+async function checkStatus(rpcUrl, hash) {
+  try {
+    // Try sequencer-specific status method
+    const res = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'sequencer_getTxStatus',
+        params: [hash]
+      })
+    })
+    const json = await res.json()
+    if (json.result?.status) {
+      // Display sequencer status in a nice box
+      const status = json.result.status
+      const statusEmoji = {
+        'queued': '⏱️',
+        'batched': '📦',
+        'l1_submitted': '🚀',
+        'l1_included': '✅',
+        'l2_included': '🎉',
+        'dropped': '❌'
+      }[status] || '🔄'
+
+      log(`┌─ Sequencer Status ─────────────────────────────┐`, 'info')
+      log(`│ ${statusEmoji} Status: ${status.toUpperCase()}`, status === 'dropped' ? 'error' : 'success')
+      if (json.result.batchId) {
+        log(`│ 📦 Batch: #${json.result.batchId}`, 'info')
+      }
+      if (json.result.l1TxHash) {
+        log(`│ 🔗 L1 TX: ${json.result.l1TxHash.slice(0, 10)}...`, 'info')
+      }
+      log(`└─────────────────────────────────────────────────┘`, 'info')
+    }
+  } catch (e) {
+    // Sequencer status method not available
+  }
+}
+
+async function pollReceipt(rpcUrl, hash) {
+  log(`⏳ Waiting for L2 inclusion...`, 'pending')
+
+  const startTime = Date.now()
+  const progressBar = ['⣾', '⣷', '⣯', '⣟', '⡿', '⢿', '⣻', '⣽']
+  let progressIdx = 0
+
+  for (let i = 0; i < 120; i++) {
+    await new Promise(r => setTimeout(r, 1000))
+
+    try {
+      const res = await fetch(rpcUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'eth_getTransactionReceipt',
+          params: [hash]
+        })
+      })
+
+      const json = await res.json()
+      if (json.result) {
+        const receipt = json.result
+        const blockNum = parseInt(receipt.blockNumber, 16)
+        const status = receipt.status === '0x1'
+        const totalTime = ((Date.now() - startTime) / 1000).toFixed(1)
+
+        log(``, '')  // blank line
+        log(`┌──────────────────────────────────────────────────────┐`, 'info')
+        if (status) {
+          log(`│ 🎉 Transaction Confirmed on L2!                      │`, 'success')
+          log(`├──────────────────────────────────────────────────────┤`, 'info')
+          log(`│ Block: #${blockNum}`, 'info')
+          if (receipt.gasUsed) {
+            const gasUsed = parseInt(receipt.gasUsed, 16)
+            log(`│ Gas Used: ${gasUsed.toLocaleString()}`, 'info')
+          }
+          log(`│ Total Time: ${totalTime}s`, 'info')
+        } else {
+          log(`│ ❌ Transaction Failed on L2                          │`, 'error')
+          log(`├──────────────────────────────────────────────────────┤`, 'info')
+          log(`│ Block: #${blockNum}`, 'error')
+          if (receipt.revertReason) {
+            log(`│ Reason: ${receipt.revertReason.slice(0, 48)}`, 'error')
+          }
+        }
+        log(`└──────────────────────────────────────────────────────┘`, 'info')
+
+        // Add link to confirmed transaction
+        const explorerUrl = `http://localhost/tx/${hash}`
+        log(`🔗 <a href="${explorerUrl}" target="_blank" style="color: #9ece6a; text-decoration: underline; font-weight: bold;">View Confirmed Transaction</a>`, '')
+        return
+      }
+
+      // Show animated progress every 2 seconds
+      if (i > 0 && i % 2 === 0) {
+        const elapsed = Math.floor((Date.now() - startTime) / 1000)
+        // Update progress indicator in place
+        if (i % 10 === 0) {
+          log(`${progressBar[progressIdx]} Waiting for L2 inclusion... (${elapsed}s)`, 'pending')
+        }
+        progressIdx = (progressIdx + 1) % progressBar.length
+
+        // Re-check sequencer status every 10 seconds
+        if (i % 10 === 0) {
+          await checkStatus(rpcUrl, hash)
+        }
+      }
+    } catch (e) {
+      // RPC error, keep trying silently unless it persists
+      if (i % 20 === 0 && i > 0) {
+        log(`⚠️ Still trying to fetch receipt...`, 'pending')
+      }
+    }
+  }
+
+  log(``, '')
+  log(`⏱️ Timeout after 120 seconds`, 'error')
+  log(`Transaction may still be processing. Check status manually.`, 'info')
+}
+
+// Mint L2 ETH by sending a deposit transaction on L1
+window.mintL2Eth = async () => {
+  try {
+    const p = getProvider()
+    if (!p || !connectedAccount) {
+      log("Connect wallet first!", 'error')
+      return
+    }
+
+    log("💰 Starting L2 ETH mint process...", 'info')
+    log("Note: Will connect to REAL L1 network (not localhost)", 'info')
+
+    // Constants for Facet deposit
+    const FACET_INBOX = "0x00000000000000000000000000000000000face7"
+    const FACET_TX_TYPE = 0x46
+    const L2_CHAIN_ID = parseInt($("chainIdHex").value, 16)
+
+    // Create Facet deposit payload
+    const facetTx = [
+      toHex(L2_CHAIN_ID),     // chain_id
+      connectedAccount,        // to (recipient on L2)
+      "0x",                   // value (0)
+      toHex(21000),           // gas_limit
+      "0x",                   // data (empty)
+      "0x"                    // data (empty)
+    ]
+
+    const rlpEncoded = toRlp(facetTx)
+    const typePrefix = toHex(FACET_TX_TYPE, { size: 1 })
+    const facetPayload = concatHex([typePrefix, rlpEncoded])
+
+    log(`Created deposit payload: ${facetPayload.slice(0, 20)}...`, 'info')
+
+    // First, check L1 chain and balance
+    // Try to detect L1 chain (Hoodi, Holesky, etc)
+    const l1ChainId = await p.request({ method: "eth_chainId" })
+    log(`Current chain: ${l1ChainId}`, 'info')
+
+    // Hoodi is the only supported L1 chain for Facet
+    const HOODI_CHAIN_ID = "0x88bb0"  // 560240 in hex
+
+    // Check if we're on Hoodi
+    const isOnHoodi = l1ChainId === HOODI_CHAIN_ID
+
+    if (!isOnHoodi) {
+      // Need to switch to Hoodi
+      log("Switching to Hoodi for deposit...", 'info')
+
+      // Hoodi chain configuration
+      const hoodiConfig = {
+        chainId: HOODI_CHAIN_ID,
+        chainName: "Hoodi Testnet",
+        nativeCurrency: { name: "ETH", symbol: "ETH", decimals: 18 },
+        rpcUrls: ["https://ethereum-hoodi-rpc.publicnode.com"],
+        blockExplorerUrls: ["https://hoodi.blockscout.com"]
+      }
+
+      try {
+        await p.request({
+          method: "wallet_switchEthereumChain",
+          params: [{ chainId: HOODI_CHAIN_ID }]
+        })
+        log("Switched to Hoodi", 'success')
+      } catch (switchErr) {
+        if (switchErr.code === 4902) {
+          // Add Hoodi chain
+          try {
+            await p.request({
+              method: "wallet_addEthereumChain",
+              params: [hoodiConfig]
+            })
+            log("Added Hoodi chain", 'success')
+          } catch (addErr) {
+            log(`Failed to add Hoodi: ${addErr.message}`, 'error')
+            return
+          }
+        } else {
+          log("Please switch to Hoodi manually", 'error')
+          return
+        }
+      }
+    }
+
+    // Check L1 balance
+    const l1Balance = await p.request({
+      method: "eth_getBalance",
+      params: [connectedAccount, "latest"]
+    })
+    const l1Eth = (parseInt(l1Balance, 16) / 1e18)
+    log(`L1 balance: ${l1Eth.toFixed(4)} ETH`, 'info')
+
+    if (l1Eth < 0.0001) {
+      log("⚠️ Low L1 balance! You need L1 ETH for gas.", 'error')
+      log(`Fund this account on L1: ${connectedAccount}`, 'error')
+      return
+    }
+
+    // Get initial L2 balance
+    const l2InitialBalance = await fetch($("rpcUrl").value, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'eth_getBalance',
+        params: [connectedAccount, 'latest']
+      })
+    }).then(r => r.json())
+      .then(j => parseInt(j.result || '0x0', 16) / 1e18)
+      .catch(() => 0)
+
+    log(`Current L2 balance: ${l2InitialBalance.toFixed(4)} ETH`, 'info')
+
+    // Send the L1 deposit transaction
+    log("Sending deposit transaction on L1...", 'pending')
+    $("mint").disabled = true
+    $("mint").textContent = "⏳ Minting..."
+
+    const txHash = await p.request({
+      method: "eth_sendTransaction",
+      params: [{
+        from: connectedAccount,
+        to: FACET_INBOX,
+        value: "0x0",
+        data: facetPayload,
+        gas: "0x30d40", // 200k gas
+      }]
+    })
+
+    log(`✅ L1 tx sent: ${txHash}`, 'success')
+    log("Waiting for L1 confirmation...", 'pending')
+
+    // Poll for L1 receipt
+    let l1Receipt = null
+    for (let i = 0; i < 60; i++) {
+      await new Promise(r => setTimeout(r, 1000))
+
+      l1Receipt = await p.request({
+        method: "eth_getTransactionReceipt",
+        params: [txHash]
+      })
+
+      if (l1Receipt) {
+        const blockNum = parseInt(l1Receipt.blockNumber, 16)
+        if (l1Receipt.status === '0x1') {
+          log(`✅ L1 confirmed in block ${blockNum}`, 'success')
+        } else {
+          log(`❌ L1 tx failed in block ${blockNum}`, 'error')
+          return
+        }
+        break
+      }
+
+      if (i % 5 === 0 && i > 0) {
+        log(`Still waiting for L1... (${i}s)`, 'pending')
+      }
+    }
+
+    if (!l1Receipt) {
+      log("⏱️ L1 confirmation timeout", 'error')
+      return
+    }
+
+    // Now poll for L2 balance update
+    log("Waiting for L2 mint (may take 30-60s)...", 'pending')
+    log("Facet importer needs to process the L1 block", 'info')
+
+    let attempts = 0
+    const maxAttempts = 120
+
+    while (attempts < maxAttempts) {
+      await new Promise(r => setTimeout(r, 1000))
+
+      const l2Balance = await fetch($("rpcUrl").value, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'eth_getBalance',
+          params: [connectedAccount, 'latest']
+        })
+      }).then(r => r.json())
+        .then(j => parseInt(j.result || '0x0', 16) / 1e18)
+        .catch(() => l2InitialBalance)
+
+      if (l2Balance > l2InitialBalance) {
+        const minted = l2Balance - l2InitialBalance
+        log(`🎉 Minted ${minted.toFixed(4)} ETH on L2!`, 'success')
+        log(`New L2 balance: ${l2Balance.toFixed(4)} ETH`, 'success')
+
+        // Switch back to L2
+        await ensureChain(p, $("chainIdHex").value, $("rpcUrl").value)
+        break
+      }
+
+      if (attempts % 10 === 0 && attempts > 0) {
+        log(`Still waiting for L2 mint... (${attempts}s)`, 'pending')
+      }
+
+      attempts++
+    }
+
+    if (attempts >= maxAttempts) {
+      log("⚠️ L2 balance unchanged after 2 minutes", 'error')
+      log("The deposit may still be processing", 'info')
+    }
+
+  } catch (e) {
+    log(`Mint failed: ${e.message}`, 'error')
+  } finally {
+    $("mint").disabled = false
+    $("mint").textContent = "💰 Mint L2 ETH (via L1 deposit)"
+  }
+}
+
+// Initialize
+log("Ready! Connect MetaMask to start.", 'info')
+log(`Default chain: ${$("chainIdHex").value}`, 'info')
+log(`Default RPC: ${$("rpcUrl").value}`, 'info')
+</script>
+</html>
