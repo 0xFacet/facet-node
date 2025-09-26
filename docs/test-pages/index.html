@@ -104,11 +104,10 @@
 <input id="chainIdHex" value="0xface7b" placeholder="0xface7b" />
 
 <label>Sequencer RPC URL</label>
-<input id="rpcUrl" value="http://localhost:7777" />
+<input id="rpcUrl" value="https://hoodi.facet.org" />
 <div class="quick">
   <button onclick="setRpc('http://localhost:7777')">:7777</button>
-  <button onclick="setRpc('http://localhost:8545')">:8545</button>
-  <button onclick="setRpc('http://localhost:8546')">:8546</button>
+  <button onclick="setRpc('https://hoodi.facet.org')">Hoodi</button>
 </div>
 
 <label>To Address</label>
@@ -119,10 +118,10 @@
   <button onclick="setTo('0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266')">Anvil #0</button>
 </div>
 
-<label>Amount (ETH)</label>
+<label>Amount (FCT)</label>
 <input id="amount" value="0.001" />
 <div class="quick">
-  <button onclick="setAmount('0')">0 ETH</button>
+  <button onclick="setAmount('0')">0 FCT</button>
   <button onclick="setAmount('0.001')">0.001</button>
   <button onclick="setAmount('0.01')">0.01</button>
   <button onclick="setAmount('0.1')">0.1</button>
@@ -149,7 +148,7 @@
 </button>
 
 <button id="mint" onclick="mintL2Eth()" disabled>
-  💰 Mint L2 ETH (via L1 deposit)
+  💰 Mint L2 FCT (via L1 deposit)
 </button>
 
 
@@ -175,7 +174,7 @@ const log = (m, type = '') => {
 // Quick setters
 window.setRpc = (url) => { $("rpcUrl").value = url; log(`RPC: ${url}`, 'info') }
 window.setTo = (addr) => { $("to").value = addr; log(`To: ${addr || 'self'}`, 'info') }
-window.setAmount = (amt) => { $("amount").value = amt; log(`Amount: ${amt} ETH`, 'info') }
+window.setAmount = (amt) => { $("amount").value = amt; log(`Amount: ${amt} FCT`, 'info') }
 window.setPriority = (gwei) => { $("priorityFee").value = gwei; log(`Priority: ${gwei} gwei`, 'info') }
 
 // EIP-6963 wallet discovery
@@ -211,10 +210,10 @@ async function ensureChain(p, chainIdHex, rpcUrl) {
           method: "wallet_addEthereumChain",
           params: [{
             chainId: chainIdHex,
-            chainName: `Facet L2 (${chainIdHex})`,
-            nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+            chainName: "Facet Hoodi",
+            nativeCurrency: { name: "Facet Compute Token", symbol: "FCT", decimals: 18 },
             rpcUrls: [rpcUrl],
-            blockExplorerUrls: ["http://localhost/"]
+            blockExplorerUrls: ["https://hoodi.explorer.facet.org"]
           }],
         })
         log(`Added chain ${chainIdHex}`, 'success')
@@ -257,7 +256,7 @@ window.connectWallet = async () => {
       params: [connectedAccount, "latest"]
     })
     const balance = (parseInt(balanceHex, 16) / 1e18).toFixed(4)
-    log(`Balance: ${balance} ETH`, 'info')
+    log(`Balance: ${balance} FCT`, 'info')
 
     // Get nonce
     const nonceHex = await p.request({
@@ -472,7 +471,7 @@ async function pollReceipt(rpcUrl, hash) {
   log(`Transaction may still be processing. Check status manually.`, 'info')
 }
 
-// Mint L2 ETH by sending a deposit transaction on L1
+// Mint L2 FCT by sending a deposit transaction on L1
 window.mintL2Eth = async () => {
   try {
     const p = getProvider()
@@ -481,7 +480,7 @@ window.mintL2Eth = async () => {
       return
     }
 
-    log("💰 Starting L2 ETH mint process...", 'info')
+    log("💰 Starting L2 FCT mint process...", 'info')
     log("Note: Will connect to REAL L1 network (not localhost)", 'info')
 
     // Constants for Facet deposit
@@ -524,7 +523,7 @@ window.mintL2Eth = async () => {
       const hoodiConfig = {
         chainId: HOODI_CHAIN_ID,
         chainName: "Hoodi Testnet",
-        nativeCurrency: { name: "ETH", symbol: "ETH", decimals: 18 },
+        nativeCurrency: { name: "Facet Compute Token", symbol: "FCT", decimals: 18 },
         rpcUrls: ["https://ethereum-hoodi-rpc.publicnode.com"],
         blockExplorerUrls: ["https://hoodi.blockscout.com"]
       }
@@ -583,7 +582,7 @@ window.mintL2Eth = async () => {
       .then(j => parseInt(j.result || '0x0', 16) / 1e18)
       .catch(() => 0)
 
-    log(`Current L2 balance: ${l2InitialBalance.toFixed(4)} ETH`, 'info')
+    log(`Current L2 balance: ${l2InitialBalance.toFixed(4)} FCT`, 'info')
 
     // Send the L1 deposit transaction
     log("Sending deposit transaction on L1...", 'pending')
@@ -660,8 +659,8 @@ window.mintL2Eth = async () => {
 
       if (l2Balance > l2InitialBalance) {
         const minted = l2Balance - l2InitialBalance
-        log(`🎉 Minted ${minted.toFixed(4)} ETH on L2!`, 'success')
-        log(`New L2 balance: ${l2Balance.toFixed(4)} ETH`, 'success')
+        log(`🎉 Minted ${minted.toFixed(4)} FCT on L2!`, 'success')
+        log(`New L2 balance: ${l2Balance.toFixed(4)} FCT`, 'success')
 
         // Switch back to L2
         await ensureChain(p, $("chainIdHex").value, $("rpcUrl").value)
@@ -684,7 +683,7 @@ window.mintL2Eth = async () => {
     log(`Mint failed: ${e.message}`, 'error')
   } finally {
     $("mint").disabled = false
-    $("mint").textContent = "💰 Mint L2 ETH (via L1 deposit)"
+    $("mint").textContent = "💰 Mint L2 FCT (via L1 deposit)"
   }
 }
 
