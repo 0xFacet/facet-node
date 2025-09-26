@@ -44,7 +44,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/facet-sequencer
+          images: ${{ env.REGISTRY }}/0xfacet/facet-sequencer
           tags: |
             type=raw,value=${{ steps.tag.outputs.tag }}
             type=sha
@@ -60,5 +60,5 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/facet-sequencer:buildcache
-          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/facet-sequencer:buildcache,mode=max
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/0xfacet/facet-sequencer:buildcache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/0xfacet/facet-sequencer:buildcache,mode=max
