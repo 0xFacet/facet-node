@@ -1,10 +1,11 @@
-import { 
-  createPublicClient, 
-  http, 
-  type PublicClient, 
+import {
+  createPublicClient,
+  http,
+  type PublicClient,
   type Hex,
   type Block,
   type Transaction,
+  type Chain,
   keccak256,
   toRlp
 } from 'viem';
@@ -16,23 +17,23 @@ export class InclusionMonitor {
   private l2Client: PublicClient;
   private readonly FACET_MAGIC_PREFIX = '0x0000000000012345';
   private isMonitoring = false;
-  
+
   constructor(
     private db: DatabaseService,
     l1RpcUrl: string,
     l2RpcUrl: string,
-    private l1Chain: any,
-    private l2Chain: any
+    private l1Chain: Chain,
+    private l2Chain: Chain
   ) {
     this.l1Client = createPublicClient({
       chain: this.l1Chain,
       transport: http(l1RpcUrl)
-    });
-    
+    }) as PublicClient;
+
     this.l2Client = createPublicClient({
       chain: this.l2Chain,
       transport: http(l2RpcUrl)
-    });
+    }) as PublicClient;
   }
   
   async start(): Promise<void> {
