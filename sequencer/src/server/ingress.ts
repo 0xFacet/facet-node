@@ -188,20 +188,16 @@ export class IngressServer {
   }
   
   async getTransactionStatus(hash: Hex): Promise<any> {
+    // First query: get transaction and batch info
     const tx = this.db.getDatabase().prepare(`
       SELECT
         t.state,
         t.batch_id,
         t.l2_block_number,
         t.drop_reason,
-        b.state as batch_state,
-        pa.l1_tx_hash,
-        pa.da_builder_request_id,
-        pa.block_number as l1_block,
-        pa.status as attempt_status
+        b.state as batch_state
       FROM transactions t
       LEFT JOIN batches b ON t.batch_id = b.id
-      LEFT JOIN post_attempts pa ON b.id = pa.batch_id AND pa.status IN ('pending', 'mined')
       WHERE t.hash = ?
     `).get(Buffer.from(hash.slice(2), 'hex')) as any;
 
@@ -209,17 +205,38 @@ export class IngressServer {
       return { status: 'unknown' };
     }
 
+    // Second query: get the best post_attempt if batch exists
+    let postAttempt: any = null;
+    if (tx.batch_id) {
+      postAttempt = this.db.getDatabase().prepare(`
+        SELECT
+          l1_tx_hash,
+          da_builder_request_id,
+          block_number as l1_block,
+          status as attempt_status
+        FROM post_attempts
+        WHERE batch_id = ?
+        AND status IN ('mined', 'pending')
+        ORDER BY
+          CASE status WHEN 'mined' THEN 2 ELSE 1 END DESC,
+          COALESCE(confirmed_at, submitted_at, 0) DESC,
+          id DESC
+        LIMIT 1
+      `).get(tx.batch_id);
+    }
+
     // Derive submission mode from presence of da_builder_request_id
-    const submissionMode = tx.da_builder_request_id ? 'da_builder' : 'direct';
+    const submissionMode = postAttempt?.da_builder_request_id ? 'da_builder' :
+                          postAttempt ? 'direct' : undefined;
 
     return {
       status: tx.state,
       batchId: tx.batch_id,
       batchState: tx.batch_state,
-      submissionMode: tx.batch_id ? submissionMode : undefined,
-      l1TxHash: tx.l1_tx_hash ? '0x' + tx.l1_tx_hash.toString('hex') : undefined,
-      daRequestId: tx.da_builder_request_id || undefined,
-      l1Block: tx.l1_block,
+      submissionMode,
+      l1TxHash: postAttempt?.l1_tx_hash ? '0x' + postAttempt.l1_tx_hash.toString('hex') : undefined,
+      daRequestId: postAttempt?.da_builder_request_id || undefined,
+      l1Block: postAttempt?.l1_block,
       l2Block: tx.l2_block_number,
       dropReason: tx.drop_reason
     };
