@@ -6,7 +6,7 @@ RUN apk add --no-cache python3 make g++ py3-pip
 WORKDIR /app
 
 # Copy package files
-COPY package*.json ./
+COPY package.json package-lock.json ./
 RUN npm ci
 
 # Copy source code and config files
@@ -29,7 +29,7 @@ RUN apk add --no-cache python3 make g++ py3-pip
 WORKDIR /app
 
 # Install production dependencies only
-COPY package*.json ./
+COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
 # Copy built application
