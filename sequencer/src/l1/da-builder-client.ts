@@ -56,7 +56,7 @@ export class DABuilderClient {
   /**
    * Submit blob data to DA Builder
    */
-  async submit(blobData: Hex, targetBlock?: bigint): Promise<DABuilderSubmitResult> {
+  async submit(blobData: Hex): Promise<DABuilderSubmitResult> {
     try {
       // Initialize KZG if not ready
       if (!this.kzg) {
@@ -81,8 +81,9 @@ export class DABuilderClient {
       const fees = await this.publicClient.estimateFeesPerGas();
       const blobBaseFee = await this.publicClient.getBlobBaseFee();
 
-      // Use provided target block or compute it
-      const targetBlockNumber = targetBlock ?? (await this.publicClient.getBlockNumber()) + 1n;
+      // Always target the next block for DA Builder submission
+      const currentBlock = await this.publicClient.getBlockNumber();
+      const targetBlockNumber = currentBlock + 1n;
 
       // Sign the transaction
       const signedTx = await this.account.signTransaction({

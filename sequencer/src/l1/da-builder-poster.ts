@@ -59,9 +59,8 @@ export class DABuilderPoster implements Poster {
       // Convert wire format to hex
       const wireFormatHex = ('0x' + batch.wire_format.toString('hex')) as Hex;
 
-      // Submit to DA Builder with the target block from the batch
-      const targetBlock = batch.target_l1_block ? BigInt(batch.target_l1_block) : undefined;
-      const submitResult = await this.daBuilderClient.submit(wireFormatHex, targetBlock);
+      // Submit to DA Builder - let it determine the next available block
+      const submitResult = await this.daBuilderClient.submit(wireFormatHex);
 
       // Track pending transaction
       this.currentPending = {
