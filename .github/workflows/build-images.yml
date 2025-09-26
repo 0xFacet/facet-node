@@ -88,5 +88,5 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ matrix.service.image }}:buildcache
-          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ matrix.service.image }}:buildcache,mode=max
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/0xfacet/${{ matrix.service.name == 'node' && 'facet-node' || 'facet-sequencer' }}:buildcache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/0xfacet/${{ matrix.service.name == 'node' && 'facet-node' || 'facet-sequencer' }}:buildcache,mode=max

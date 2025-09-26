@@ -1,58 +1,47 @@
 FROM node:20-alpine AS builder
 
-# Install build dependencies for native modules
-RUN apk add --no-cache python3 make g++ py3-pip
-
 WORKDIR /app
 
-# Copy package files
+# Tooling required to build native modules (better-sqlite3, c-kzg)
+RUN apk add --no-cache python3 make g++
+
+# Install dependencies
 COPY package.json package-lock.json ./
 RUN npm ci
 
-# Copy source code and config files
+# Copy source and build
 COPY tsconfig.json ./
-COPY .eslintrc.json ./
+COPY eslint.config.mjs ./
 COPY src ./src
+RUN npm run typecheck && npm run build
 
-# Build (skip linting in Docker, just compile)
-RUN npm run typecheck && npx tsc
+# Strip dev dependencies so we can reuse node_modules in the runtime image
+RUN npm prune --omit=dev
 
-# Production image
 FROM node:20-alpine
-
-# Set production environment
-ENV NODE_ENV=production
-
-# Install runtime dependencies for native modules (needed for c-kzg and better-sqlite3)
-RUN apk add --no-cache python3 make g++ py3-pip
 
 WORKDIR /app
 
-# Install production dependencies only
-COPY package.json package-lock.json ./
-RUN npm ci --omit=dev && npm cache clean --force
+ENV NODE_ENV=production
 
-# Copy built application
+# Runtime deps for native modules & health checks
+RUN apk add --no-cache libstdc++ curl && \
+    mkdir -p /data
+
+COPY package.json package-lock.json ./
+COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 
-# Create data directory and set permissions for non-root user
-RUN mkdir -p /data && \
-    addgroup -g 1001 -S nodejs && \
+RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001 && \
     chown -R nodejs:nodejs /app /data
 
-# Health check - use PORT env var (defaults to 8545)
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:${PORT:-8545}/health || exit 1
+  CMD curl --fail --silent http://localhost:${PORT:-8545}/health || exit 1
 
-# Expose ports - main RPC and metrics
 EXPOSE 8545 9090
-
-# Volume for database
 VOLUME ["/data"]
 
-# Switch to non-root user (already created above)
 USER nodejs
 
-# Start the application
 CMD ["node", "dist/index.js"]
