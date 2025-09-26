@@ -325,7 +325,7 @@ export class L1Poster {
       // Only log actual errors, not "transaction not found" which is expected for pending txs
       if (!error.message?.includes('could not be found')) {
         logger.error({ error: error.message }, 'Error checking pending transaction');
-      } else {
+      } else if (this.currentBlobTx) {
         // Transaction is still pending, this is normal
         const timePending = Date.now() - this.currentBlobTx.submittedAt;
         if (timePending > 30000 && this.currentBlobTx.attempts < 5) {

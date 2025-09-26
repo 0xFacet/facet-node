@@ -167,7 +167,7 @@ export class DABuilderPoster implements Poster {
     } catch (error: any) {
       logger.debug({
         error: error.message,
-        requestId: this.currentPending.requestId
+        requestId: this.currentPending?.requestId
       }, 'Error checking DA Builder status');
     }
   }
