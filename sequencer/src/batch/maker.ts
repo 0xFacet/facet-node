@@ -31,24 +31,25 @@ export class BatchMaker {
   
   async createBatch(maxBytes: number = this.MAX_BLOB_SIZE - 1000, maxCount: number = 500): Promise<number | null> {
     const database = this.db.getDatabase();
-    
+
+    // Get L1 data before starting the transaction
+    const targetL1Block = await this.getNextL1Block();
+    const gasBid = await this.calculateGasBid();
+
     return database.transaction(() => {
       // Select transactions ordered by fee
       const candidates = database.prepare(`
-        SELECT * FROM transactions 
+        SELECT * FROM transactions
         WHERE state IN ('queued', 'requeued')
         ORDER BY max_fee_per_gas DESC, received_seq ASC
         LIMIT ?
       `).all(maxCount * 2) as Transaction[];
-      
+
       if (candidates.length === 0) return null;
-      
+
       // Apply selection criteria
       const selected = this.selectTransactions(candidates, maxBytes, maxCount);
       if (selected.length === 0) return null;
-      
-      // Get target L1 block
-      const targetL1Block = this.getNextL1Block();
       
       // Create Facet batch wire format
       const wireFormat = this.createFacetWireFormat(selected, targetL1Block);
@@ -77,7 +78,7 @@ export class BatchMaker {
         contentHash,
         wireFormat,
         wireFormat.length,
-        this.calculateGasBid().toString(),
+        gasBid.toString(),
         selected.length,
         Number(targetL1Block),
         txHashesJson
@@ -185,16 +186,17 @@ export class BatchMaker {
     return Buffer.from(hash.slice(2), 'hex');
   }
   
-  private getNextL1Block(): bigint {
-    // For now, return a future block number
-    // In production, this would query the L1 client
-    return BigInt(Math.floor(Date.now() / 12000));
+  private async getNextL1Block(): Promise<bigint> {
+    // Get the actual next L1 block number
+    const currentBlock = await this.l1Client.getBlockNumber();
+    return currentBlock + 1n;
   }
-  
-  private calculateGasBid(): bigint {
-    // Simple gas bid calculation
-    // In production, this would be more sophisticated
-    return 100000000000n; // 100 gwei
+
+  private async calculateGasBid(): Promise<bigint> {
+    // Get actual gas prices from L1
+    const fees = await this.l1Client.estimateFeesPerGas();
+    // Use 2x the current base fee for reliability
+    return fees.maxFeePerGas ? fees.maxFeePerGas * 2n : 100000000000n;
   }
   
   async shouldCreateBatch(): Promise<boolean> {

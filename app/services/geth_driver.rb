@@ -136,34 +136,39 @@ module GethDriver
       raise "No transactions in returned payload"
     end
     
-    # Check if geth dropped any transactions we submitted
-    submitted_count = transaction_payloads.size
-    returned_count = payload['transactions'].size
-    
-    if submitted_count != returned_count
-      dropped_count = submitted_count - returned_count
-      Rails.logger.warn("Block #{new_facet_block.number}: Geth rejected #{dropped_count} of #{submitted_count} txs (accepted #{returned_count})")
+    # Check if geth dropped any transactions we submitted (excluding system txs which can't be dropped)
+    user_tx_payloads = transactions.map(&:to_facet_payload)
+    submitted_user_count = user_tx_payloads.size
+    # Returned count minus system txs (which are always included)
+    returned_user_count = payload['transactions'].size - system_count
+
+    if submitted_user_count != returned_user_count
+      dropped_count = submitted_user_count - returned_user_count
+      Rails.logger.warn("Block #{new_facet_block.number}: Geth rejected #{dropped_count} of #{submitted_user_count} user txs (accepted #{returned_user_count})")
       
-      # Identify which transactions were dropped by comparing hashes
-      submitted_hashes = transaction_payloads.map do |tx_payload|
+      # Identify which user transactions were dropped by comparing hashes
+      # Only check user transactions, not system transactions
+      submitted_user_hashes = user_tx_payloads.map do |tx_payload|
         # Convert ByteString to binary string if needed
         tx_data = tx_payload.is_a?(ByteString) ? tx_payload.to_bin : tx_payload
         ByteString.from_bin(Eth::Util.keccak256(tx_data)).to_hex
       end
-      
-      returned_hashes = payload['transactions'].map do |tx_payload|
+
+      # Skip system transactions in returned payload (first system_count txs)
+      returned_user_payloads = payload['transactions'][system_count..-1] || []
+      returned_user_hashes = returned_user_payloads.map do |tx_payload|
         # Convert ByteString to binary string if needed
         tx_data = tx_payload.is_a?(ByteString) ? tx_payload.to_bin : tx_payload
         ByteString.from_bin(Eth::Util.keccak256(tx_data)).to_hex
       end
-      
-      dropped_hashes = submitted_hashes - returned_hashes
-      
+
+      dropped_hashes = submitted_user_hashes - returned_user_hashes
+
       if dropped_hashes.any?
-        Rails.logger.warn("Dropped transaction hashes: #{dropped_hashes.join(', ')}")
-        
-        # Log details about each dropped transaction for debugging
-        transaction_payloads.each_with_index do |tx_payload, index|
+        Rails.logger.warn("Dropped user transaction hashes: #{dropped_hashes.join(', ')}")
+
+        # Log details about each dropped user transaction for debugging
+        user_tx_payloads.each_with_index do |tx_payload, index|
           # Convert ByteString to binary string if needed
           tx_data = tx_payload.is_a?(ByteString) ? tx_payload.to_bin : tx_payload
           tx_hash = ByteString.from_bin(Eth::Util.keccak256(tx_data)).to_hex
@@ -171,7 +176,7 @@ module GethDriver
             # Try to decode the transaction to get more details
             begin
               decoded_tx = Eth::Tx.decode(tx_data)
-              
+
               # Handle different transaction types
               nonce = if decoded_tx.respond_to?(:nonce)
                 decoded_tx.nonce
@@ -180,12 +185,19 @@ module GethDriver
               else
                 "unknown"
               end
-              
+
               from = decoded_tx.respond_to?(:from) ? decoded_tx.from : "unknown"
-              to = decoded_tx.respond_to?(:destination) ? decoded_tx.destination : 
+              to = decoded_tx.respond_to?(:destination) ? decoded_tx.destination :
                    decoded_tx.respond_to?(:to) ? decoded_tx.to : "unknown"
-              
-              Rails.logger.warn("Dropped tx #{index}: hash=#{tx_hash}, nonce=#{nonce}, from=#{from}, to=#{to}")
+
+              value = decoded_tx.respond_to?(:value) ? decoded_tx.value : "unknown"
+              gas_limit = decoded_tx.respond_to?(:gas_limit) ? decoded_tx.gas_limit : "unknown"
+              gas_price = decoded_tx.respond_to?(:gas_price) ? decoded_tx.gas_price :
+                          decoded_tx.respond_to?(:max_fee_per_gas) ? decoded_tx.max_fee_per_gas : "unknown"
+              data_size = decoded_tx.respond_to?(:data) ? decoded_tx.data.size : "unknown"
+              tx_type = decoded_tx.respond_to?(:type) ? decoded_tx.type : "legacy"
+
+              Rails.logger.warn("Dropped tx #{index}: hash=#{tx_hash}, type=#{tx_type}, nonce=#{nonce}, from=#{from}, to=#{to}, value=#{value}, gas_limit=#{gas_limit}, gas_price=#{gas_price}, data_size=#{data_size}")
             rescue => e
               Rails.logger.warn("Dropped tx #{index}: hash=#{tx_hash} (could not decode: #{e.message})")
             end
@@ -193,7 +205,7 @@ module GethDriver
         end
       end
     else
-      Rails.logger.debug("All #{submitted_count} submitted transactions were included by geth")
+      Rails.logger.debug("All #{submitted_user_count} submitted user transactions were included by geth")
     end
 
     new_payload_request = [payload]

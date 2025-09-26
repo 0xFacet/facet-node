@@ -143,27 +143,40 @@ export class SequencerAPI {
   
   private async checkHealth(): Promise<any> {
     const database = this.db.getDatabase();
-    
+
     const stats = database.prepare(`
-      SELECT 
+      SELECT
         (SELECT COUNT(*) FROM transactions WHERE state IN ('queued', 'requeued')) as queued,
         (SELECT COUNT(*) FROM batches WHERE state IN ('sealed', 'submitted')) as pending_batches,
         (SELECT MAX(confirmed_at) FROM post_attempts WHERE status = 'mined') as last_confirmation
     `).get() as any;
-    
+
     const now = Date.now();
-    const healthy = 
+    const healthy =
       stats.queued < this.config.maxPendingTxs &&
       (!stats.last_confirmation || (now - stats.last_confirmation) < 300000);
-    
+
+    // Check DA Builder health if enabled
+    let daBuilderStatus = undefined;
+    if (this.config.useDABuilder) {
+      daBuilderStatus = {
+        enabled: true,
+        url: this.config.daBuilderUrl,
+        lastSuccessMs: null,  // TODO: implement actual health monitoring
+        healthy: true  // TODO: implement actual health check
+      };
+    }
+
     return {
-      healthy,
+      healthy: healthy && (!daBuilderStatus || daBuilderStatus.healthy),
       uptime: process.uptime(),
       queuedTxs: stats.queued,
       pendingBatches: stats.pending_batches,
-      lastL1Confirmation: stats.last_confirmation
+      lastL1Confirmation: stats.last_confirmation,
+      daBuilder: daBuilderStatus
     };
   }
+
   
   private async getStats(): Promise<any> {
     const database = this.db.getDatabase();
