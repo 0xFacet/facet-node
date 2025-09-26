@@ -28,12 +28,12 @@ export class InclusionMonitor {
     this.l1Client = createPublicClient({
       chain: this.l1Chain,
       transport: http(l1RpcUrl)
-    }) as PublicClient;
+    });
 
     this.l2Client = createPublicClient({
       chain: this.l2Chain,
       transport: http(l2RpcUrl)
-    }) as PublicClient;
+    });
   }
   
   async start(): Promise<void> {
