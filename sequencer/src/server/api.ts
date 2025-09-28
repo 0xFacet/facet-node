@@ -6,12 +6,22 @@ import { logger } from '../utils/logger.js';
 import type { Config } from '../config/config.js';
 import type { Hex } from 'viem';
 
+type JsonRpcParams = any[] | Record<string, any> | undefined;
+
 interface JsonRpcRequest {
   jsonrpc: string;
   method: string;
-  params: any[];
+  params?: JsonRpcParams;
   id: number | string;
 }
+
+type JsonRpcPayload = JsonRpcRequest | JsonRpcRequest[];
+
+const SPECIAL_METHODS = new Set([
+  'eth_sendRawTransaction',
+  'sequencer_getTxStatus',
+  'sequencer_getStats'
+]);
 
 export class SequencerAPI {
   private app: FastifyInstance;
@@ -38,42 +48,24 @@ export class SequencerAPI {
     });
     
     // Main JSON-RPC endpoint
-    this.app.post('/', async (req: FastifyRequest<{ Body: JsonRpcRequest }>, reply) => {
-      const { method, params, id } = req.body;
-      
-      try {
-        switch (method) {
-          case 'eth_sendRawTransaction': {
-            const hash = await this.ingress.handleTransaction(params[0] as Hex);
-            reply.send({ jsonrpc: '2.0', result: hash, id });
-            break;
-          }
+    this.app.post('/', async (req: FastifyRequest<{ Body: JsonRpcPayload }>, reply) => {
+      const payload = req.body;
+      const requests = Array.isArray(payload) ? payload : [payload];
 
-          case 'sequencer_getTxStatus': {
-            const status = await this.ingress.getTransactionStatus(params[0] as Hex);
-            reply.send({ jsonrpc: '2.0', result: status, id });
-            break;
-          }
-          
-          case 'sequencer_getStats': {
-            const stats = await this.getStats();
-            reply.send({ jsonrpc: '2.0', result: stats, id });
-            break;
-          }
+      const canFastProxy = Array.isArray(payload)
+        && requests.length > 0
+        && requests.every((request) => request && typeof request === 'object' && typeof request.method === 'string')
+        && requests.every((request) => !SPECIAL_METHODS.has((request as JsonRpcRequest).method));
 
-          default:
-            // Proxy unknown methods to L2 RPC
-            const proxyResult = await this.proxyToL2(method, params, id);
-            reply.send(proxyResult);
-        }
-      } catch (error: any) {
-        logger.error({ method, error: error.message }, 'RPC error');
-        reply.code(500).send({
-          jsonrpc: '2.0',
-          error: { code: -32000, message: error.message },
-          id
-        });
+      if (canFastProxy) {
+        const proxied = await this.proxyPayload(payload);
+        reply.send(proxied);
+        return;
       }
+
+      const responses = await Promise.all(requests.map((request) => this.handleRequest(request)));
+
+      reply.send(Array.isArray(payload) ? responses : responses[0]);
     });
     
     // Health check endpoint
@@ -106,7 +98,52 @@ export class SequencerAPI {
     await this.app.close();
   }
 
-  private async proxyToL2(method: string, params: any[], id: number | string): Promise<any> {
+  private async handleRequest(request: any): Promise<any> {
+    const id = request && typeof request === 'object' && 'id' in request ? request.id : null;
+
+    if (!request || typeof request !== 'object' || typeof request.method !== 'string') {
+      return this.makeError(id, -32600, 'Invalid request');
+    }
+
+    const { method } = request as JsonRpcRequest;
+    const params: JsonRpcParams = request.params;
+
+    if (!SPECIAL_METHODS.has(method)) {
+      return this.proxyToL2(method, params, id);
+    }
+
+    try {
+      switch (method) {
+        case 'eth_sendRawTransaction': {
+          const rawTx = Array.isArray(params) ? params[0] : params;
+          if (typeof rawTx !== 'string') {
+            throw new Error('Invalid raw transaction parameter');
+          }
+          const hash = await this.ingress.handleTransaction(rawTx as Hex);
+          return { jsonrpc: '2.0', result: hash, id };
+        }
+        case 'sequencer_getTxStatus': {
+          const txHash = Array.isArray(params) ? params[0] : params;
+          if (typeof txHash !== 'string') {
+            throw new Error('Invalid tx hash parameter');
+          }
+          const status = await this.ingress.getTransactionStatus(txHash as Hex);
+          return { jsonrpc: '2.0', result: status, id };
+        }
+        case 'sequencer_getStats': {
+          const stats = await this.getStats();
+          return { jsonrpc: '2.0', result: stats, id };
+        }
+        default:
+          return this.proxyToL2(method, params, id);
+      }
+    } catch (error: any) {
+      logger.error({ method, error: error.message }, 'RPC error');
+      return this.makeError(id, -32000, error.message || 'Unhandled error');
+    }
+  }
+
+  private async proxyToL2(method: string, params: JsonRpcParams, id: number | string | null): Promise<any> {
     try {
       // Forward the exact RPC request to L2
       const response = await fetch(this.l2RpcUrl, {
@@ -115,7 +152,7 @@ export class SequencerAPI {
         body: JSON.stringify({
           jsonrpc: '2.0',
           method,
-          params,
+          params: params ?? [],
           id
         })
       });
@@ -130,15 +167,43 @@ export class SequencerAPI {
       return result;
     } catch (error: any) {
       logger.error({ method, error: error.message }, 'Proxy to L2 failed');
-      return {
-        jsonrpc: '2.0',
-        error: {
-          code: -32000,
-          message: `Proxy error: ${error.message}`
-        },
-        id
-      };
+      return this.makeError(id, -32000, `Proxy error: ${error.message}`);
     }
+  }
+
+  private async proxyPayload(payload: JsonRpcPayload): Promise<any> {
+    try {
+      const response = await fetch(this.l2RpcUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      return await response.json();
+    } catch (error: any) {
+      logger.error({ error: error.message }, 'Batch proxy to L2 failed');
+      return this.makeBatchProxyError(payload, `Proxy error: ${error.message}`);
+    }
+  }
+
+  private makeBatchProxyError(payload: JsonRpcPayload, message: string) {
+    if (Array.isArray(payload)) {
+      return payload.map((request) => {
+        const id = request && typeof request === 'object' && 'id' in request ? request.id : null;
+        return this.makeError(id, -32000, message);
+      });
+    }
+
+    const id = payload && typeof payload === 'object' && 'id' in payload ? payload.id : null;
+    return this.makeError(id, -32000, message);
+  }
+
+  private makeError(id: number | string | null, code: number, message: string) {
+    return {
+      jsonrpc: '2.0',
+      error: { code, message },
+      id
+    };
   }
   
   private async checkHealth(): Promise<any> {
