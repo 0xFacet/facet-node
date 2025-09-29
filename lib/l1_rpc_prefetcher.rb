@@ -47,6 +47,14 @@ class L1RpcPrefetcher
       result = promise.value!(timeout)
       Rails.logger.debug "Got result for block #{block_number}"
 
+      # Diagnostic: value! should never return nil; log state/reason and raise
+      if result.nil?
+        Rails.logger.error "Prefetch promise returned nil for block #{block_number}; state=#{promise.state}, reason=#{promise.reason.inspect}"
+        # Remove the fulfilled-with-nil promise so next call can recreate it
+        @promises.delete(block_number)
+        raise "Prefetch promise returned nil for block #{block_number}"
+      end
+
       # Clean up :not_ready promises so they can be retried
       if result[:error] == :not_ready
         @promises.delete(block_number)
@@ -114,6 +122,12 @@ class L1RpcPrefetcher
       Concurrent::Promise.execute(executor: @pool) do
         Rails.logger.debug "Executing fetch for block #{block_number}"
         fetch_job(block_number)
+      end.then do |res|
+        if res.nil?
+          Rails.logger.error "Prefetch fulfilled with nil for block #{block_number}; deleting cached promise entry"
+          @promises.delete(block_number)
+        end
+        res
       end.rescue do |e|
         Rails.logger.error "Prefetch failed for block #{block_number}: #{e.message}"
         # Clean up failed promise so it can be retried
