@@ -201,5 +201,5 @@ class L1RpcPrefetcher
   def current_l1_block_number
     @eth.get_block_number
   end
-  memoize :current_l1_block_number, ttl: 12.seconds
+  memoize :current_l1_block_number, ttl: 3.seconds
 end

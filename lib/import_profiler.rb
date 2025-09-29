@@ -38,7 +38,7 @@ class ImportProfiler
     thread_id = Thread.current.object_id
     @start_stack[thread_id] ||= Concurrent::Map.new
     @start_stack[thread_id][label] ||= Concurrent::Array.new
-    @start_stack[thread_id][label].push(Time.current)
+    @start_stack[thread_id][label].push(Process.clock_gettime(Process::CLOCK_MONOTONIC))
   end
 
   def stop(label)
@@ -48,7 +48,7 @@ class ImportProfiler
     return nil unless @start_stack[thread_id] && @start_stack[thread_id][label] && !@start_stack[thread_id][label].empty?
 
     start_time = @start_stack[thread_id][label].pop
-    elapsed = Time.current - start_time
+    elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_time
 
     @timings[label] ||= Concurrent::Array.new
     @timings[label] << elapsed

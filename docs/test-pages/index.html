@@ -329,7 +329,7 @@ window.sendTx = async () => {
     log(`└──────────────────────────────────────────────────────┘`, 'info')
 
     // Add clickable link to block explorer
-    const explorerUrl = `http://localhost/tx/${hash}`
+    const explorerUrl = `https://hoodi.explorer.facet.org/tx/${hash}`
     log(`🔗 <a href="${explorerUrl}" target="_blank" style="color: #7dcfff; text-decoration: underline;">View on Explorer</a>`, '')
     log(``, '')  // blank line for spacing
 
@@ -439,7 +439,7 @@ async function pollReceipt(rpcUrl, hash) {
         log(`└──────────────────────────────────────────────────────┘`, 'info')
 
         // Add link to confirmed transaction
-        const explorerUrl = `http://localhost/tx/${hash}`
+        const explorerUrl = `https://hoodi.explorer.facet.org/tx/${hash}`
         log(`🔗 <a href="${explorerUrl}" target="_blank" style="color: #9ece6a; text-decoration: underline; font-weight: bold;">View Confirmed Transaction</a>`, '')
         return
       }
