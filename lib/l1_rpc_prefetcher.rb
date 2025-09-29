@@ -16,11 +16,8 @@ class L1RpcPrefetcher
   end
 
   def ensure_prefetched(from_block)
-    # Check current chain tip first to avoid prefetching beyond what exists
-    latest = @eth.get_block_number
-
     # Don't prefetch beyond chain tip
-    to_block = [from_block + @ahead, latest].min
+    to_block = [from_block + @ahead, current_l1_block_number].min
 
     # Only create promises for blocks we don't have yet
     blocks_to_fetch = (from_block..to_block).reject { |n| @promises.key?(n) }

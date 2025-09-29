@@ -1,5 +1,3 @@
-require 'l1_rpc_prefetcher'
-
 class EthBlockImporter
   include SysConfig
   include Memery
@@ -144,6 +142,7 @@ class EthBlockImporter
   
   def import_blocks_until_done
     MemeryExtensions.clear_all_caches!
+    ImportProfiler.reset if ImportProfiler.enabled?
 
     # Initialize stats tracking
     stats_start_time = Time.current
@@ -268,10 +267,13 @@ class EthBlockImporter
   end
   
   def import_single_block(block_number)
+    ImportProfiler.start('import_single_block')
     start = Time.current
 
     # Fetch block data from prefetcher
+    ImportProfiler.start('prefetcher_fetch')
     response = prefetcher.fetch(block_number)
+    ImportProfiler.stop('prefetcher_fetch')
 
     # Handle cancellation, fetch failure, or block not ready
     if response.nil?
@@ -299,10 +301,12 @@ class EthBlockImporter
     end
 
     # Import the L2 block(s)
+    ImportProfiler.start('propose_facet_block')
     imported_facet_blocks = propose_facet_block(
       facet_block: facet_block,
       facet_txs: facet_txs
     )
+    ImportProfiler.stop('propose_facet_block')
 
     logger.debug "Block #{block_number}: Found #{facet_txs.length} facet txs, created #{imported_facet_blocks.length} L2 blocks"
 
@@ -313,6 +317,7 @@ class EthBlockImporter
     eth_block_cache[eth_block.number] = eth_block
     prune_caches
 
+    ImportProfiler.stop('import_single_block')
     [imported_facet_blocks, [eth_block]]
   end
 
@@ -412,5 +417,11 @@ class EthBlockImporter
 
     # Output single message
     logger.info stats_message
+
+    # Output profiler report if enabled
+    if ImportProfiler.enabled? && blocks_imported_count % 100 == 0
+      ImportProfiler.report
+      ImportProfiler.reset
+    end
   end
 end

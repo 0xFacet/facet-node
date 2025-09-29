@@ -22,13 +22,15 @@ module GethDriver
     finalized_block:
   )
     # Create filler blocks if necessary and update head_block
+    ImportProfiler.start('create_filler_blocks')
     filler_blocks = create_filler_blocks(
       head_block: head_block,
       new_facet_block: new_facet_block,
       safe_block: safe_block,
       finalized_block: finalized_block
     )
-    
+    ImportProfiler.stop('create_filler_blocks')
+
     head_block = filler_blocks.last || head_block
     
     new_facet_block.number = head_block.number + 1
@@ -44,7 +46,9 @@ module GethDriver
       finalizedBlockHash: finalized_block_hash,
     }
     
+    ImportProfiler.start('assign_mint_amounts')
     FctMintCalculator.assign_mint_amounts(transactions, new_facet_block)
+    ImportProfiler.stop('assign_mint_amounts')
     
     system_txs = [new_facet_block.attributes_tx]
     
@@ -115,7 +119,9 @@ module GethDriver
     payload_attributes = ByteString.deep_hexify(payload_attributes)
     fork_choice_state = ByteString.deep_hexify(fork_choice_state)
     
+    ImportProfiler.start('engine_forkchoiceUpdated')
     fork_choice_response = client.call("engine_forkchoiceUpdatedV#{version}", [fork_choice_state, payload_attributes])
+    ImportProfiler.stop('engine_forkchoiceUpdated')
     if fork_choice_response['error']
       raise "Fork choice update failed: #{fork_choice_response['error']}"
     end
@@ -125,7 +131,9 @@ module GethDriver
       raise "Fork choice update did not return a payload ID"
     end
 
+    ImportProfiler.start('engine_getPayload')
     get_payload_response = client.call("engine_getPayloadV#{version}", [payload_id])
+    ImportProfiler.stop('engine_getPayload')
     if get_payload_response['error']
       raise "Get payload failed: #{get_payload_response['error']}"
     end
@@ -217,7 +225,9 @@ module GethDriver
     
     new_payload_request = ByteString.deep_hexify(new_payload_request)
     
+    ImportProfiler.start('engine_newPayload')
     new_payload_response = client.call("engine_newPayloadV#{version}", new_payload_request)
+    ImportProfiler.stop('engine_newPayload')
     
     status = new_payload_response['status']
     unless status == 'VALID'
@@ -239,7 +249,9 @@ module GethDriver
     
     fork_choice_state = ByteString.deep_hexify(fork_choice_state)
     
+    ImportProfiler.start('engine_forkchoiceUpdated_finalize')
     fork_choice_response = client.call("engine_forkchoiceUpdatedV#{version}", [fork_choice_state, nil])
+    ImportProfiler.stop('engine_forkchoiceUpdated_finalize')
 
     status = fork_choice_response['payloadStatus']['status']
     unless status == 'VALID'
