@@ -302,20 +302,27 @@ window.sendTx = async () => {
       chain: { id: parseInt(chainIdHex, 16) }
     })
 
+    // Create public client for reading chain data
+    const publicClient = createPublicClient({
+      transport: http(rpcUrl),
+      chain: { id: parseInt(chainIdHex, 16) }
+    })
+
     // Show loading state
     log("⏳ Waiting for signature...", 'pending')
     $("send").disabled = true
     $("send").textContent = "⏳ Signing..."
 
+    const { maxFeePerGas, maxPriorityFeePerGas } = await publicClient.estimateFeesPerGas();
+    
     const startTime = Date.now()
     const hash = await wc.sendTransaction({
       account: connectedAccount,
       to,
       value: amt ? parseEther(amt) : 0n,
       data,
-      maxPriorityFeePerGas: parseGwei(priorityFeeGwei),
-      maxFeePerGas: parseGwei(priorityFeeGwei) * 2n, // 2x priority as max
-      // Let MetaMask/sequencer figure out gas limit, nonce, etc
+      maxPriorityFeePerGas: maxPriorityFeePerGas,
+      maxFeePerGas: maxFeePerGas
     })
     const submitTime = ((Date.now() - startTime) / 1000).toFixed(1)
 
@@ -510,7 +517,7 @@ window.mintL2Eth = async () => {
     log(`Current chain: ${l1ChainId}`, 'info')
 
     // Hoodi is the only supported L1 chain for Facet
-    const HOODI_CHAIN_ID = "0x88bb0"  // 560240 in hex
+    const HOODI_CHAIN_ID = "0x88bb0"  // 560048 in hex
 
     // Check if we're on Hoodi
     const isOnHoodi = l1ChainId === HOODI_CHAIN_ID
@@ -596,7 +603,7 @@ window.mintL2Eth = async () => {
         to: FACET_INBOX,
         value: "0x0",
         data: facetPayload,
-        gas: "0x30d40", // 200k gas
+        gas: "0x30d40"
       }]
     })
 

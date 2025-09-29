@@ -1,20 +1,24 @@
-import { 
-  parseTransaction, 
-  type TransactionSerializableEIP1559, 
-  keccak256, 
-  type Hex, 
+import {
+  parseTransaction,
+  type TransactionSerializableEIP1559,
+  type TransactionSerializableEIP2930,
+  type TransactionSerializableLegacy,
+  type TransactionSerializedEIP1559,
+  type TransactionSerializedEIP2930,
+  type TransactionSerializedLegacy,
+  keccak256,
+  type Hex,
   toHex,
-  recoverTransactionAddress,
-  type TransactionSerializedEIP1559
+  recoverTransactionAddress
 } from 'viem';
 import type { DatabaseService } from '../db/schema.js';
 import { logger } from '../utils/logger.js';
 
 export class IngressServer {
   private readonly MAX_PENDING = 10000;
-  private readonly MIN_BASE_FEE = 1000000000n; // 1 gwei
+  private readonly MIN_BASE_FEE = 1000000n; // 1 gwei
   private readonly MAX_TX_SIZE = 128 * 1024; // 128KB
-  private readonly BLOCK_GAS_LIMIT = 30_000_000;
+  private readonly BLOCK_GAS_LIMIT = 100_000_000;
   
   constructor(private db: DatabaseService) {}
   
@@ -37,36 +41,66 @@ export class IngressServer {
       throw new Error('Sequencer busy');
     }
     
-    // Decode and validate EIP-1559
-    let tx: TransactionSerializableEIP1559;
+    // Decode and validate transaction
+    let tx: TransactionSerializableEIP1559 | TransactionSerializableEIP2930 | TransactionSerializableLegacy;
     let from: Hex;
+    let maxFeePerGas: bigint;
+    let maxPriorityFeePerGas: bigint | undefined;
+
     try {
       const parsed = parseTransaction(rawTx);
-      if (parsed.type !== 'eip1559') {
-        throw new Error('Only EIP-1559 transactions accepted');
+
+      // Accept legacy (type 0), EIP-2930 (type 1), and EIP-1559 (type 2)
+      // Reject type 3 (blob transactions) and beyond
+      if (parsed.type !== 'eip1559' && parsed.type !== 'eip2930' && parsed.type !== 'legacy') {
+        throw new Error('Only legacy, EIP-2930, and EIP-1559 transactions accepted');
       }
-      tx = parsed as TransactionSerializableEIP1559;
-      
-      // Recover the from address from the signed transaction
-      from = await recoverTransactionAddress({
-        serializedTransaction: rawTx as TransactionSerializedEIP1559
-      });
-      
+
+      tx = parsed;
+
+      // Extract fee values based on transaction type and recover address
+      if (parsed.type === 'legacy' || parsed.type === 'eip2930') {
+        // Legacy and EIP-2930 both use gasPrice
+        const gasPriceTx = tx as TransactionSerializableLegacy | TransactionSerializableEIP2930;
+
+        if (!gasPriceTx.gasPrice || gasPriceTx.gasPrice < this.MIN_BASE_FEE) {
+          throw new Error('Gas price below minimum');
+        }
+        maxFeePerGas = gasPriceTx.gasPrice;
+        maxPriorityFeePerGas = undefined;  // NULL for legacy/EIP-2930
+
+        // Recover from address with proper type
+        from = await recoverTransactionAddress({
+          serializedTransaction: rawTx as TransactionSerializedLegacy | TransactionSerializedEIP2930
+        });
+      } else {
+        // EIP-1559
+        const eip1559Tx = tx as TransactionSerializableEIP1559;
+
+        if (!eip1559Tx.maxFeePerGas || eip1559Tx.maxFeePerGas < this.MIN_BASE_FEE) {
+          throw new Error('Max fee per gas below minimum');
+        }
+
+        if (!eip1559Tx.maxPriorityFeePerGas) {
+          throw new Error('Priority fee required');
+        }
+
+        maxFeePerGas = eip1559Tx.maxFeePerGas;
+        maxPriorityFeePerGas = eip1559Tx.maxPriorityFeePerGas;
+
+        // Recover from address with proper type
+        from = await recoverTransactionAddress({
+          serializedTransaction: rawTx as TransactionSerializedEIP1559
+        });
+      }
+
       if (!from) {
         throw new Error('Could not recover sender address');
       }
     } catch (e: any) {
       throw new Error('Invalid transaction encoding: ' + e.message);
     }
-    
-    if (!tx.maxFeePerGas || tx.maxFeePerGas < this.MIN_BASE_FEE) {
-      throw new Error('Max fee per gas below minimum');
-    }
-    
-    if (!tx.maxPriorityFeePerGas) {
-      throw new Error('Priority fee required');
-    }
-    
+
     if (!tx.gas || tx.gas > BigInt(this.BLOCK_GAS_LIMIT)) {
       throw new Error('Invalid gas limit');
     }
@@ -109,12 +143,12 @@ export class IngressServer {
       if (sameNonce) {
         // Replace-by-fee: new transaction must have higher gas price
         const oldMaxFee = BigInt(sameNonce.max_fee_per_gas);
-        const newMaxFee = tx.maxFeePerGas!;
-        
+        const newMaxFee = maxFeePerGas;
+
         if (newMaxFee > oldMaxFee) {
           // Delete old transaction and insert new one
           database.prepare('DELETE FROM transactions WHERE hash = ?').run(sameNonce.hash);
-          logger.info({ 
+          logger.info({
             oldHash: '0x' + sameNonce.hash.toString('hex'),
             newHash: txHash,
             oldFee: oldMaxFee.toString(),
@@ -133,14 +167,14 @@ export class IngressServer {
           received_seq, received_at, state
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
-      
+
       stmt.run(
         Buffer.from(txHash.slice(2), 'hex'),
         Buffer.from(rawTx.slice(2), 'hex'),
         Buffer.from(from.slice(2), 'hex'),
         Number(tx.nonce || 0),
-        tx.maxFeePerGas!.toString(),
-        tx.maxPriorityFeePerGas!.toString(),
+        maxFeePerGas.toString(),
+        maxPriorityFeePerGas?.toString() || null,  // NULL for legacy
         Number(tx.gas),
         intrinsicGas,
         seqResult.next_seq,
@@ -158,7 +192,7 @@ export class IngressServer {
     return txHash;
   }
   
-  private calculateIntrinsicGas(tx: TransactionSerializableEIP1559): number {
+  private calculateIntrinsicGas(tx: TransactionSerializableEIP1559 | TransactionSerializableEIP2930 | TransactionSerializableLegacy): number {
     // Base cost
     let gas = 21000;
     
@@ -176,8 +210,8 @@ export class IngressServer {
       }
     }
     
-    // Access list cost
-    if (tx.accessList && tx.accessList.length > 0) {
+    // Access list cost (only for EIP-1559 and EIP-2930)
+    if ('accessList' in tx && tx.accessList && tx.accessList.length > 0) {
       for (const entry of tx.accessList) {
         gas += 2400; // Address cost
         gas += 1900 * (entry.storageKeys?.length || 0); // Storage key cost

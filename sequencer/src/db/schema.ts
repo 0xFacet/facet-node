@@ -7,7 +7,7 @@ export interface Transaction {
   from_address: Buffer;
   nonce: number;
   max_fee_per_gas: string;
-  max_priority_fee_per_gas: string;
+  max_priority_fee_per_gas?: string;  // Optional for legacy transactions
   gas_limit: number;
   intrinsic_gas: number;
   received_seq: number;
@@ -63,7 +63,7 @@ export const createSchema = (db: Database.Database) => {
       from_address BLOB NOT NULL,
       nonce INTEGER NOT NULL,
       max_fee_per_gas TEXT NOT NULL,
-      max_priority_fee_per_gas TEXT NOT NULL,
+      max_priority_fee_per_gas TEXT,  -- Nullable for legacy transactions
       gas_limit INTEGER NOT NULL,
       intrinsic_gas INTEGER NOT NULL,
       received_seq INTEGER NOT NULL,
@@ -143,8 +143,8 @@ export class DatabaseService {
     // Prepare common statements
     this.insertTx = this.db.prepare(`
       INSERT INTO transactions (
-        hash, raw, from_address, nonce, max_fee_per_gas, 
-        max_priority_fee_per_gas, gas_limit, intrinsic_gas, 
+        hash, raw, from_address, nonce, max_fee_per_gas,
+        max_priority_fee_per_gas, gas_limit, intrinsic_gas,
         received_seq, received_at, state
       ) VALUES (
         @hash, @raw, @from_address, @nonce, @max_fee_per_gas,
