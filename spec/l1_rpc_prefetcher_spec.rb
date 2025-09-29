@@ -40,6 +40,10 @@ RSpec.describe L1RpcPrefetcher do
   end
   
   describe '#stats' do
+    before do
+      allow(ethereum_client).to receive(:get_block_number).and_return(10000000)
+    end
+
     it 'returns comprehensive statistics' do
       stats = prefetcher.stats
       expect(stats).to have_key(:promises_total)
@@ -51,6 +55,10 @@ RSpec.describe L1RpcPrefetcher do
   end
   
   describe '#shutdown' do
+    before do
+      allow(ethereum_client).to receive(:get_block_number).and_return(10000000)
+    end
+
     it 'shuts down gracefully' do
       expect { prefetcher.shutdown }.not_to raise_error
     end

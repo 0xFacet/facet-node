@@ -11,13 +11,22 @@ class L1RpcPrefetcher
     # Thread-safe collections and pool
     @pool = Concurrent::FixedThreadPool.new(threads)
     @promises = Concurrent::Map.new
+    @last_chain_tip = current_l1_block_number
 
     Rails.logger.info "L1RpcPrefetcher initialized with #{threads} threads"
   end
-
+  
   def ensure_prefetched(from_block)
+    distance_from_last_tip = @last_chain_tip - from_block
+    
+    current_tip = if distance_from_last_tip > 10
+      cached_current_l1_block_number
+    else
+      current_l1_block_number
+    end
+    
     # Don't prefetch beyond chain tip
-    to_block = [from_block + @ahead, current_l1_block_number].min
+    to_block = [from_block + @ahead, current_tip].min
 
     # Only create promises for blocks we don't have yet
     blocks_to_fetch = (from_block..to_block).reject { |n| @promises.key?(n) }
@@ -199,7 +208,11 @@ class L1RpcPrefetcher
   end
   
   def current_l1_block_number
-    @eth.get_block_number
+    @last_chain_tip = @eth.get_block_number
   end
-  memoize :current_l1_block_number, ttl: 3.seconds
+  
+  def cached_current_l1_block_number
+    current_l1_block_number
+  end
+  memoize :cached_current_l1_block_number, ttl: 12.seconds
 end
