@@ -14,11 +14,11 @@ class BlobProvider
   
   # List all blob carriers in a block
   # Returns array of hashes with tx_hash, tx_index, and versioned_hashes
-  def list_carriers(block_number)
-    # Get block with transactions
-    block = ethereum_client.get_block(block_number, true)
+  def list_carriers(block_number, block_data: nil)
+    # Use provided block data or fetch if not provided
+    block = block_data || ethereum_client.get_block(block_number, true)
     return [] unless block && block['transactions']
-    
+
     carriers = []
     block['transactions'].each do |tx|
       # Blob versioned hashes are in the transaction itself (type 3 transactions)
@@ -36,27 +36,26 @@ class BlobProvider
   
   # Fetch blob data by versioned hash
   # Returns ByteString or nil if not found
-  def get_blob(versioned_hash, block_number:)
+  def get_blob(versioned_hash, block_number:, block_data: nil)
     # Fetch raw blob from beacon node
-    raw_blob = fetch_blob_from_beacon(versioned_hash, block_number: block_number)
+    raw_blob = fetch_blob_from_beacon(versioned_hash, block_number: block_number, block_data: block_data)
     return nil unless raw_blob
-    
+
     # Decode from EIP-4844 blob format to get actual data
     decoded_data = BlobUtils.from_blobs(blobs: [raw_blob.to_hex])
-    
+
     # Return as ByteString
     ByteString.from_hex(decoded_data)
   end
-  
+
   private
-  
-  def fetch_blob_from_beacon(versioned_hash, block_number:)
+
+  def fetch_blob_from_beacon(versioned_hash, block_number:, block_data: nil)
     # We must have a block number for deterministic blob fetching
     raise ArgumentError, "block_number is required for blob fetching" unless block_number
-    
-    # Get the block to find the slot
-    block = ethereum_client.get_block(block_number, false)
-    return nil unless block
+
+    # Use provided block data or fetch if not provided
+    block = block_data || ethereum_client.get_block(block_number, false)
     
     # Get blob sidecars for this block's slot
     begin

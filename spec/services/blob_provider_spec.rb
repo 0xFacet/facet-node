@@ -14,8 +14,8 @@ RSpec.describe BlobProvider do
         let(:blob_data) { create_test_blob_with_facet_data(transactions: test_transactions, position: :middle) }
         
         before do
-          # Stub beacon API response
-          allow(provider).to receive(:fetch_blob_from_beacon).with(versioned_hash, block_number: 12345).and_return(blob_data)
+          # Stub beacon API response (now includes block_data parameter)
+          allow(provider).to receive(:fetch_blob_from_beacon).with(versioned_hash, block_number: 12345, block_data: nil).and_return(blob_data)
         end
         
         it 'returns the decoded data from the blob' do
@@ -40,7 +40,7 @@ RSpec.describe BlobProvider do
         end
         
         before do
-          allow(provider).to receive(:fetch_blob_from_beacon).with(versioned_hash, block_number: 12345).and_return(blob_data)
+          allow(provider).to receive(:fetch_blob_from_beacon).with(versioned_hash, block_number: 12345, block_data: nil).and_return(blob_data)
         end
         
         it 'still returns the decoded data (provider is content-agnostic)' do
@@ -57,12 +57,13 @@ RSpec.describe BlobProvider do
       
       context 'when beacon API is unavailable' do
         before do
-          allow(provider).to receive(:fetch_blob_from_beacon).with(anything, anything).and_raise(Net::HTTPError.new("Connection failed", nil))
+          allow(provider).to receive(:fetch_blob_from_beacon).with(anything, hash_including(:block_number)).and_raise(Net::HTTPError.new("Connection failed", nil))
         end
         
-        it 'returns nil' do
-          result = provider.get_blob(versioned_hash, block_number: 12345)
-          expect(result).to be_nil
+        it 'raises the error' do
+          expect {
+            provider.get_blob(versioned_hash, block_number: 12345)
+          }.to raise_error(Net::HTTPError, "Connection failed")
         end
       end
     end

@@ -168,14 +168,14 @@ class FacetBatchCollector
     # Skip if no blob provider
     return [[], 0] unless blob_provider
     
-    # Get list of blob carriers
-    carriers = blob_provider.list_carriers(eth_block['number'].to_i(16))
+    # Get list of blob carriers (pass block data to avoid duplicate fetch)
+    carriers = blob_provider.list_carriers(eth_block['number'].to_i(16), block_data: eth_block)
     
     carriers.each do |carrier|
       carrier[:versioned_hashes].each_with_index do |versioned_hash, blob_index|
         # Fetch blob data (returns ByteString by default)
         block_number = eth_block['number'].to_i(16)
-        blob_data = blob_provider.get_blob(versioned_hash, block_number: block_number)
+        blob_data = blob_provider.get_blob(versioned_hash, block_number: block_number, block_data: eth_block)
         
         if blob_data.nil?
           logger.warn "Missing blob #{versioned_hash} from tx #{carrier[:tx_hash]}"
