@@ -110,15 +110,26 @@ class L1RpcPrefetcher
       threads_queued: @pool.queue_length
     }
   end
-
+  
   def shutdown
     @pool.shutdown
-    if @pool.wait_for_termination(30)
-      Rails.logger.info "L1 RPC Prefetcher thread pool shut down successfully"
-    else
-      Rails.logger.warn "L1 RPC Prefetcher shutdown timed out, forcing kill"
-      @pool.kill
-    end
+    terminated = @pool.wait_for_termination(3)
+    @pool.kill unless terminated
+  
+    # Explicitly remove any outstanding promises
+    @promises.each_pair { |_, pr| pr.cancel if pr.pending? rescue nil }
+    @promises.clear
+  
+    Rails.logger.info(
+      terminated ?
+        'L1 RPC Prefetcher thread pool shut down successfully' :
+        "L1 RPC Prefetcher shutdown timed out after 10s, pool killed"
+    )
+  
+    terminated
+  rescue StandardError => e
+    Rails.logger.error("Error during L1RpcPrefetcher shutdown: #{e.message}\n#{e.backtrace.join("\n")}")
+    false
   end
 
   def enqueue_single(block_number)
