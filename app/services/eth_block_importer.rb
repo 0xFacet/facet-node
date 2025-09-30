@@ -371,6 +371,9 @@ class EthBlockImporter
   
   def shutdown
     @prefetcher&.shutdown
+  rescue => e
+    logger.error "Error shutting down EthBlockImporter: #{e.message}"
+    nil
   end
 
   def report_import_stats(blocks_imported_count:, stats_start_time:, stats_start_block:,
