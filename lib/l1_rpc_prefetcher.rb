@@ -123,7 +123,7 @@ class L1RpcPrefetcher
     Rails.logger.info(
       terminated ?
         'L1 RPC Prefetcher thread pool shut down successfully' :
-        "L1 RPC Prefetcher shutdown timed out after 10s, pool killed"
+        "L1 RPC Prefetcher shutdown timed out after 3s, pool killed"
     )
   
     terminated
