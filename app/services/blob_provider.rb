@@ -3,7 +3,7 @@ class BlobProvider
   attr_reader :beacon_client, :ethereum_client
   
   def initialize(beacon_client: nil, ethereum_client: nil)
-    @beacon_client = beacon_client || EthereumBeaconNodeClient.new
+    @beacon_client = beacon_client || EthereumBeaconNodeClient.l1
     @ethereum_client = ethereum_client || EthRpcClient.l1
     
     # Validate we have beacon node configured
@@ -46,9 +46,6 @@ class BlobProvider
     
     # Return as ByteString
     ByteString.from_hex(decoded_data)
-  rescue => e
-    Rails.logger.error "Failed to fetch/decode blob #{versioned_hash}: #{e.message}"
-    nil
   end
   
   private
@@ -64,6 +61,7 @@ class BlobProvider
     # Get blob sidecars for this block's slot
     begin
       sidecars = beacon_client.get_blob_sidecars_for_execution_block(block)
+      Rails.logger.debug "Block #{block_number}: Found #{sidecars&.size || 0} sidecars"
       return nil unless sidecars && !sidecars.empty?
       
       # Find the sidecar with matching versioned hash
@@ -87,8 +85,6 @@ class BlobProvider
           return ByteString.from_bin(blob_bytes)
         end
       end
-    rescue => e
-      Rails.logger.debug "Failed to fetch sidecars for block #{block_number}: #{e.message}"
     end
     
     Rails.logger.warn "Blob not found for versioned hash #{versioned_hash}"

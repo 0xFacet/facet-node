@@ -1,15 +1,5 @@
 class EthRpcClient
-  class HttpError < StandardError
-    attr_reader :code, :http_message
-    
-    def initialize(code, http_message)
-      @code = code
-      @http_message = http_message
-      super("HTTP error: #{code} #{http_message}")
-    end
-  end
-  class ApiError < StandardError; end
-  class MethodRequiredError < StandardError; end
+  include RpcErrors
   attr_accessor :base_url
 
   def initialize(base_url = ENV['L1_RPC_URL'])
@@ -117,7 +107,7 @@ class EthRpcClient
     end
     
     unless method
-      raise MethodRequiredError, "Method is required"
+      raise RpcErrors::MethodRequiredError, "Method is required"
     end
     
     data = {
@@ -135,7 +125,7 @@ class EthRpcClient
       max_interval: 32,
       multiplier: 2,
       rand_factor: 0.4,
-      on: [Net::ReadTimeout, Net::OpenTimeout, HttpError, ApiError],
+      on: [Net::ReadTimeout, Net::OpenTimeout, RpcErrors::HttpError, RpcErrors::ApiError],
       on_retry: ->(exception, try, elapsed_time, next_interval) {
         Rails.logger.info "Retrying #{method} (attempt #{try}, next delay: #{next_interval.round(2)}s) - #{exception.message}"
       }
@@ -143,13 +133,13 @@ class EthRpcClient
       response = HTTParty.post(url, body: data.to_json, headers: headers)
       
       if response.code != 200
-        raise HttpError.new(response.code, response.message)
+        raise RpcErrors::HttpError.new(response.code, response.message)
       end
 
       parsed_response = JSON.parse(response.body, max_nesting: false)
       
       if parsed_response['error']
-        raise ApiError, "API error: #{parsed_response.dig('error', 'message') || 'Unknown API error'}"
+        raise RpcErrors::ApiError, "API error: #{parsed_response.dig('error', 'message') || 'Unknown API error'}"
       end
 
       parsed_response['result']

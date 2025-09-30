@@ -202,9 +202,6 @@ class FacetBatchCollector
     end
     
     [batches, missing_count]
-  rescue => e
-    logger.error "Failed to collect blob batches: #{e.message}"
-    [[], 0]
   end
   
   # Deduplicate batches by content hash, keeping earliest by L1 tx index

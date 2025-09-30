@@ -1,65 +1,40 @@
 class EthereumBeaconNodeClient
   include Memery
-  
-  attr_accessor :base_url, :api_key
+  include RpcErrors
 
-  def initialize(base_url: ENV['ETHEREUM_BEACON_NODE_API_BASE_URL'], api_key: ENV['ETHEREUM_BEACON_NODE_API_KEY'])
+  attr_accessor :base_url
+
+  def initialize(base_url = ENV['ETHEREUM_BEACON_NODE_API_BASE_URL'])
     self.base_url = base_url&.chomp('/')
-    self.api_key = api_key
+  end
+
+  def self.l1
+    @_l1_client ||= new(ENV.fetch('ETHEREUM_BEACON_NODE_API_BASE_URL'))
   end
 
   def get_blob_sidecars(block_id)
-    base_url_with_key = [base_url, api_key].compact.join('/').chomp('/')
-    url = [base_url_with_key, "eth/v1/beacon/blob_sidecars/#{block_id}"].join('/')
-    
-    response = HTTParty.get(url)
-    raise "Failed to fetch blob sidecars: #{response.code}" unless response.success?
-    
-    response.parsed_response['data']
+    query_api("eth/v1/beacon/blob_sidecars/#{block_id}")
   end
-  
+
   def get_block(block_id)
-    base_url_with_key = [base_url, api_key].compact.join('/').chomp('/')
-    url = [base_url_with_key, "eth/v2/beacon/blocks/#{block_id}"].join('/')
-    
-    response = HTTParty.get(url)
-    raise "Failed to fetch block: #{response.code}" unless response.success?
-    
-    response.parsed_response['data']
+    query_api("eth/v2/beacon/blocks/#{block_id}")
   end
-  
+
   def get_genesis
-    base_url_with_key = [base_url, api_key].compact.join('/').chomp('/')
-    url = [base_url_with_key, "eth/v1/beacon/genesis"].join('/')
-    
-    response = HTTParty.get(url)
-    raise "Failed to fetch genesis: #{response.code}" unless response.success?
-    
-    response.parsed_response['data']
+    query_api("eth/v1/beacon/genesis")
   end
   memoize :get_genesis
 
-  # Fetches consensus spec values (e.g., seconds_per_slot). Field name casing
-  # can differ across clients; we normalize in seconds_per_slot.
   def get_spec
-    base_url_with_key = [base_url, api_key].compact.join('/').chomp('/')
-    url = [base_url_with_key, "eth/v1/config/spec"].join('/')
-
-    response = HTTParty.get(url)
-    return {} unless response.success?
-    
-    response.parsed_response['data']
+    query_api("eth/v1/config/spec")
   end
+  memoize :get_spec
 
   # Returns seconds per slot, falling back to 12 if unavailable.
   def seconds_per_slot
-    @_seconds_per_slot ||= begin
-      spec = get_spec || {}
-      val = spec['SECONDS_PER_SLOT'] || spec['seconds_per_slot']
-      (val || 12).to_i
-    rescue StandardError
-      12
-    end
+    spec = get_spec
+    val = spec['SECONDS_PER_SLOT'] || spec['seconds_per_slot']
+    (val || 12).to_i
   end
 
   # Compute the beacon slot corresponding to an execution block timestamp
@@ -85,5 +60,39 @@ class EthereumBeaconNodeClient
     ts_hex_or_int = result.fetch('timestamp')
     ts = ts_hex_or_int.is_a?(String) ? ts_hex_or_int.to_i(16) : ts_hex_or_int.to_i
     get_blob_sidecars_for_execution_timestamp(ts)
+  end
+
+  private
+
+  def query_api(endpoint)
+    # Parse API key from URL if it's embedded in the path (e.g., https://beacon.com/api-key/eth/v1/...)
+    url = [base_url, endpoint].join('/')
+
+    Retriable.retriable(
+      tries: 7,
+      base_interval: 1,
+      max_interval: 32,
+      multiplier: 2,
+      rand_factor: 0.4,
+      on: [Net::ReadTimeout, Net::OpenTimeout, RpcErrors::HttpError, RpcErrors::ApiError],
+      on_retry: ->(exception, try, elapsed_time, next_interval) {
+        Rails.logger.info "Retrying beacon API #{endpoint} (attempt #{try}, next delay: #{next_interval.round(2)}s) - #{exception.message}"
+      }
+    ) do
+      response = HTTParty.get(url)
+      
+      unless response.success?
+        raise RpcErrors::HttpError.new(response.code, response.message)
+      end
+
+      parsed = response.parsed_response
+
+      # Check for API-level errors in the response
+      if parsed.is_a?(Hash) && parsed['error']
+        raise RpcErrors::ApiError, "API error: #{parsed['error']['message'] || parsed['error']}"
+      end
+
+      parsed
+    end
   end
 end
