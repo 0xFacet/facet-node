@@ -201,7 +201,6 @@ class EthBlockImporter
     end
   end
   
-  
   def fetch_block_from_cache(block_number)
     block_number = [block_number, 0].max
     
@@ -270,20 +269,15 @@ class EthBlockImporter
     ImportProfiler.start('import_single_block')
     start = Time.current
 
-    # Fetch block data from prefetcher
-    ImportProfiler.start('prefetcher_fetch')
-    response = prefetcher.fetch(block_number)
-    ImportProfiler.stop('prefetcher_fetch')
-
-    # Handle cancellation, fetch failure, or block not ready
-    if response.nil?
-      raise BlockNotReadyToImportError.new("Block #{block_number} fetch was cancelled or failed")
+    begin
+      ImportProfiler.start('prefetcher_fetch')
+      response = prefetcher.fetch(block_number)
+    rescue L1RpcPrefetcher::BlockFetchError => e
+      raise BlockNotReadyToImportError.new(e.message)
+    ensure
+      ImportProfiler.stop('prefetcher_fetch')
     end
-
-    if response[:error] == :not_ready
-      raise BlockNotReadyToImportError.new("Block #{block_number} not yet available on L1")
-    end
-
+    
     # Extract data from prefetcher response
     eth_block = response[:eth_block]
     facet_block = response[:facet_block]

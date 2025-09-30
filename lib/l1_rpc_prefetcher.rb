@@ -1,5 +1,8 @@
 class L1RpcPrefetcher
   include Memery
+
+  # Raised when a block fetch cannot complete (timeout, not ready, etc)
+  class BlockFetchError < StandardError; end
   
   def initialize(ethereum_client:,
                  ahead: ENV.fetch('L1_PREFETCH_FORWARD', Rails.env.test? ? 5 : 20).to_i,
@@ -49,29 +52,18 @@ class L1RpcPrefetcher
 
     Rails.logger.debug "Fetching block #{block_number}, promise state: #{promise.state}"
 
-    begin
-      result = promise.value!(timeout)
-      Rails.logger.debug "Got result for block #{block_number}"
+    result = promise.value!(timeout)
 
-      # Diagnostic: value! should never return nil; log state/reason and raise
-      if result.nil?
-        Rails.logger.error "Prefetch promise returned nil for block #{block_number}; state=#{promise.state}, reason=#{promise.reason.inspect}"
-        # Remove the fulfilled-with-nil promise so next call can recreate it
-        @promises.delete(block_number)
-        raise "Prefetch promise returned nil for block #{block_number}"
-      end
-
-      # Clean up :not_ready promises so they can be retried
-      if result[:error] == :not_ready
-        @promises.delete(block_number)
-      end
-
-      result
-    rescue Concurrent::TimeoutError => e
-      Rails.logger.error "Timeout fetching block #{block_number} after #{timeout}s"
+    if result.nil? || result == :not_ready_sentinel
       @promises.delete(block_number)
-      raise
+      message = result.nil? ?
+        "Block #{block_number} fetch timed out after #{timeout}s" :
+        "Block #{block_number} not yet available on L1"
+      raise BlockFetchError.new(message)
     end
+
+    Rails.logger.debug "Got result for block #{block_number}"
+    result
   end
 
   def clear_older_than(min_keep)
@@ -139,15 +131,8 @@ class L1RpcPrefetcher
       Concurrent::Promise.execute(executor: @pool) do
         Rails.logger.debug "Executing fetch for block #{block_number}"
         fetch_job(block_number)
-      end.then do |res|
-        if res.nil?
-          Rails.logger.error "Prefetch fulfilled with nil for block #{block_number}; deleting cached promise entry"
-          @promises.delete(block_number)
-        end
-        res
       end.rescue do |e|
         Rails.logger.error "Prefetch failed for block #{block_number}: #{e.message}"
-        # Clean up failed promise so it can be retried
         @promises.delete(block_number)
         raise e
       end
@@ -164,7 +149,7 @@ class L1RpcPrefetcher
       # Handle case where block doesn't exist yet (normal when caught up)
       if block.nil?
         Rails.logger.debug "Block #{block_number} not yet available on L1"
-        return { error: :not_ready, block_number: block_number }
+        return :not_ready_sentinel
       end
 
       receipts = client.get_transaction_receipts(block_number)
