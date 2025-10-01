@@ -40,13 +40,15 @@ class FacetBatchParser
         # Skip if wrong chain ID
         if wire_chain_id != chain_id
           logger.debug "Skipping batch for chain #{wire_chain_id} (expected #{chain_id})"
+
+          role_offset = index + FacetBatchConstants::ROLE_OFFSET
+          role = data[role_offset, FacetBatchConstants::ROLE_SIZE].unpack1('C')
+
           # Read length to skip entire batch efficiently
           length_offset = index + FacetBatchConstants::LENGTH_OFFSET
           length = data[length_offset, FacetBatchConstants::LENGTH_SIZE].unpack1('N')  # uint32 big-endian
+
           offset = index + FacetBatchConstants::HEADER_SIZE + length
-          # Add signature size if priority batch
-          role_offset = index + FacetBatchConstants::ROLE_OFFSET
-          role = data[role_offset, FacetBatchConstants::ROLE_SIZE].unpack1('C')
           offset += FacetBatchConstants::SIGNATURE_SIZE if role == FacetBatchConstants::Role::PRIORITY
           next
         end
@@ -62,24 +64,23 @@ class FacetBatchParser
 
         # Move past this entire batch
         # Read length to know how much to skip
+        role_offset = index + FacetBatchConstants::ROLE_OFFSET
+        role = data[role_offset, FacetBatchConstants::ROLE_SIZE].unpack1('C')
         length_offset = index + FacetBatchConstants::LENGTH_OFFSET
         length = data[length_offset, FacetBatchConstants::LENGTH_SIZE].unpack1('N')
         offset = index + FacetBatchConstants::HEADER_SIZE + length
-        # Add signature size if priority batch
-        role_offset = index + FacetBatchConstants::ROLE_OFFSET
-        role = data[role_offset, FacetBatchConstants::ROLE_SIZE].unpack1('C')
         offset += FacetBatchConstants::SIGNATURE_SIZE if role == FacetBatchConstants::Role::PRIORITY
       rescue ParseError, ValidationError => e
         logger.debug "Failed to parse batch at offset #{index}: #{e.message}"
         # Try to skip past this batch
         if index + FacetBatchConstants::HEADER_SIZE <= data.length
+          role_offset = index + FacetBatchConstants::ROLE_OFFSET
+          role = data[role_offset, FacetBatchConstants::ROLE_SIZE].unpack1('C')
+
           length_offset = index + FacetBatchConstants::LENGTH_OFFSET
           length = data[length_offset, FacetBatchConstants::LENGTH_SIZE].unpack1('N')
           if length > 0 && length <= FacetBatchConstants::MAX_BATCH_BYTES
             offset = index + FacetBatchConstants::HEADER_SIZE + length
-            # Check for priority batch signature
-            role_offset = index + FacetBatchConstants::ROLE_OFFSET
-            role = data[role_offset, FacetBatchConstants::ROLE_SIZE].unpack1('C')
             offset += FacetBatchConstants::SIGNATURE_SIZE if role == FacetBatchConstants::Role::PRIORITY
           else
             offset = index + 1
