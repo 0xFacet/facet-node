@@ -217,19 +217,15 @@ class FacetBlockBuilder
       logger.warn "Unknown transaction type: 0x#{tx_type.to_s(16)}"
       21_000
     end
-  rescue => e
-    logger.error "Failed to parse transaction gas limit: #{e.message}"
-    21_000  # Default fallback
   end
   
   def create_facet_transaction(tx_bytes, batch)
     # Create StandardL2Transaction from raw bytes
     # These are standard EIP-2718 typed transactions (EIP-1559, EIP-2930, legacy)
     StandardL2Transaction.from_raw_bytes(tx_bytes)
-  rescue => e
-    logger.error "Failed to create transaction from batch: #{e.message}"
-    logger.error "Transaction bytes (hex): #{tx_bytes.to_hex[0..100]}..."
-    logger.error e.backtrace.first(5).join("\n")
+  rescue StandardL2Transaction::DecodeError => e
+    batch_hash = batch.respond_to?(:content_hash) ? batch.content_hash.to_hex : 'unknown'
+    logger.warn "Skipping invalid transaction from batch #{batch_hash}: #{e.message}"
     nil
   end
   
@@ -264,9 +260,6 @@ class FacetBlockBuilder
         tx_hash: Hash32.from_hex(single_tx_data[:tx_hash])
       )
     end
-  rescue => e
-    logger.error "Failed to create V1 transaction: #{e.message}"
-    nil
   end
   
   def default_authorized_signer(block_number)

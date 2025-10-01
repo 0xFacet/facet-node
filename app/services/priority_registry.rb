@@ -48,8 +48,8 @@ class PriorityRegistry
       # Default to ENV variable for PoC
       ENV['PRIORITY_SIGNER_ADDRESS'] ? Address20.from_hex(ENV['PRIORITY_SIGNER_ADDRESS']) : nil
     end
-  rescue => e
-    Rails.logger.error "Failed to get authorized signer for block #{l1_block_number}: #{e.message}"
+  rescue StandardError => e
+    Rails.logger.warn "Failed to get authorized signer for block #{l1_block_number}: #{e.message}"
     nil
   end
   
@@ -69,8 +69,8 @@ class PriorityRegistry
     else
       default_config
     end
-  rescue => e
-    Rails.logger.error "Failed to load priority registry config: #{e.message}"
+  rescue JSON::ParserError, Errno::ENOENT, Errno::EACCES => e
+    Rails.logger.warn "Failed to load priority registry config: #{e.message}"
     default_config
   end
   

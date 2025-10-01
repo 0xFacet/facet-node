@@ -155,9 +155,6 @@ class FacetBatchCollector
       FacetBatchConstants::Source::CALLDATA,
       source_details
     )
-  rescue => e
-    logger.error "Failed to parse calldata batches from tx #{tx['hash']}: #{e.message}"
-    []
   end
   
   # Collect batches from EIP-4844 blobs

@@ -2,6 +2,7 @@
 # These are the transactions that come from batches and go into L2 blocks,
 # as opposed to FacetTransaction which is the special V1 single transaction format (0x7D/0x7E)
 class StandardL2Transaction < T::Struct
+  class DecodeError < StandardError; end
   const :raw_bytes, ByteString
   const :tx_hash, Hash32
   const :from_address, Address20
@@ -49,6 +50,8 @@ class StandardL2Transaction < T::Struct
       # Legacy transaction (no type byte or invalid type)
       parse_legacy_transaction(bytes, tx_hash)
     end
+  rescue StandardError => e
+    raise DecodeError, "Failed to decode transaction: #{e.message}"
   end
   
   private
@@ -196,10 +199,6 @@ class StandardL2Transaction < T::Struct
     # Handle both string and Eth::Address object returns
     address_hex = address.is_a?(String) ? address : address.to_s
     Address20.from_hex(address_hex)
-  rescue => e
-    # Downgrade to debug to avoid noisy logs during tests; recovery is optional for inclusion
-    Rails.logger.debug "Failed to recover EIP-1559 address: #{e.message}"
-    Address20.from_hex("0x" + "0" * 40)
   end
   
   def self.recover_address_eip2930(decoded, v, r, s, chain_id)
@@ -224,9 +223,6 @@ class StandardL2Transaction < T::Struct
     # Handle both string and Eth::Address object returns
     address_hex = address.is_a?(String) ? address : address.to_s
     Address20.from_hex(address_hex)
-  rescue => e
-    Rails.logger.debug "Failed to recover EIP-2930 address: #{e.message}"
-    Address20.from_hex("0x" + "0" * 40)
   end
   
   def self.recover_address_legacy(tx_data, v, r, s)
@@ -273,8 +269,5 @@ class StandardL2Transaction < T::Struct
     # Handle both string and Eth::Address object returns
     address_hex = address.is_a?(String) ? address : address.to_s
     Address20.from_hex(address_hex)
-  rescue => e
-    Rails.logger.debug "Failed to recover legacy address: #{e.message}"
-    Address20.from_hex("0x" + "0" * 40)
   end
 end
