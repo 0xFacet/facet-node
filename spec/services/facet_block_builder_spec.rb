@@ -189,35 +189,31 @@ RSpec.describe FacetBlockBuilder do
   
   def create_forced_batch(l1_tx_index:, tx_count:)
     transactions = tx_count.times.map { create_tx_bytes }
-    
+
     ParsedBatch.new(
-      role: FacetBatchConstants::Role::FORCED,
+      role: FacetBatchConstants::Role::PERMISSIONLESS,
       signer: nil,
-      target_l1_block: l1_block_number,
       l1_tx_index: l1_tx_index,
       source: FacetBatchConstants::Source::CALLDATA,
       source_details: {},
       transactions: transactions,
       content_hash: Hash32.from_bin(Eth::Util.keccak256(rand.to_s)),
-      chain_id: ChainIdManager.current_l2_chain_id,
-      extra_data: nil
+      chain_id: ChainIdManager.current_l2_chain_id
     )
   end
-  
+
   def create_priority_batch(l1_tx_index:, tx_count:, signer:)
     transactions = tx_count.times.map { create_tx_bytes }
-    
+
     ParsedBatch.new(
       role: FacetBatchConstants::Role::PRIORITY,
       signer: signer,
-      target_l1_block: l1_block_number,
       l1_tx_index: l1_tx_index,
       source: FacetBatchConstants::Source::CALLDATA,
       source_details: {},
       transactions: transactions,
       content_hash: Hash32.from_bin(Eth::Util.keccak256(rand.to_s)),
-      chain_id: ChainIdManager.current_l2_chain_id,
-      extra_data: nil
+      chain_id: ChainIdManager.current_l2_chain_id
     )
   end
   

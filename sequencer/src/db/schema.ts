@@ -27,7 +27,6 @@ export interface Batch {
   blob_size: number;
   gas_bid: string;
   tx_count: number;
-  target_l1_block?: number;
   tx_hashes: string; // JSON array of transaction hashes
 }
 
@@ -89,7 +88,6 @@ export const createSchema = (db: Database.Database) => {
       blob_size INTEGER NOT NULL,
       gas_bid TEXT NOT NULL,
       tx_count INTEGER NOT NULL,
-      target_l1_block INTEGER,
       tx_hashes JSON NOT NULL DEFAULT '[]' -- JSON array of transaction hashes in order
     );
     

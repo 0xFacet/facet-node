@@ -25,17 +25,21 @@ RSpec.describe 'Blob End-to-End Integration' do
       
       # Step 2: Create a Facet batch
       puts "\n=== Creating Facet batch ==="
-      batch_data = create_test_batch_data(transactions)
-      puts "  Batch size: #{batch_data.bytesize} bytes"
+      rlp_tx_list = create_test_batch_data(transactions)
+      puts "  Transaction list size: #{rlp_tx_list.bytesize} bytes"
       puts "  Batch contains #{transactions.length} transactions"
-      
+
       # Step 3: Create blob with Facet data (simulating DA Builder aggregation)
       puts "\n=== Encoding to EIP-4844 blob ==="
-      
-      # Add magic prefix and length header
+
+      # Build complete wire format
+      chain_id = ChainIdManager.current_l2_chain_id
       facet_payload = FacetBatchConstants::MAGIC_PREFIX.to_bin
-      facet_payload += [batch_data.length].pack('N')
-      facet_payload += batch_data
+      facet_payload += [chain_id].pack('Q>')  # uint64 big-endian
+      facet_payload += [FacetBatchConstants::VERSION].pack('C')
+      facet_payload += [FacetBatchConstants::Role::PERMISSIONLESS].pack('C')
+      facet_payload += [rlp_tx_list.length].pack('N')
+      facet_payload += rlp_tx_list
       
       # Simulate aggregation with other data
       other_rollup_data = "\xDE\xAD\xBE\xEF".b * 1000  # 4KB of other data
@@ -74,7 +78,6 @@ RSpec.describe 'Blob End-to-End Integration' do
       # Parse batches
       parsed_batches = parser.parse_payload(
         decoded_bytes,
-        12345,  # l1_block_number
         0,      # l1_tx_index
         FacetBatchConstants::Source::BLOB,
         { versioned_hash: versioned_hash }
@@ -89,12 +92,12 @@ RSpec.describe 'Blob End-to-End Integration' do
       batch = parsed_batches.first
       expect(batch.transactions.length).to eq(3)
       expect(batch.source).to eq(FacetBatchConstants::Source::BLOB)
-      expect(batch.role).to eq(FacetBatchConstants::Role::FORCED)
+      expect(batch.role).to eq(FacetBatchConstants::Role::PERMISSIONLESS)
       
-      puts "  ✓ Batch role: #{batch.role == 1 ? 'FORCED' : 'SEQUENCER'}"
+      puts "  ✓ Batch role: #{batch.role == FacetBatchConstants::Role::PRIORITY ? 'PRIORITY' : 'PERMISSIONLESS'}"
       puts "  ✓ Transaction count: #{batch.transactions.length}"
       puts "  ✓ Source: #{batch.source_description}"
-      puts "  ✓ Target L1 block: #{batch.target_l1_block}"
+      puts "  ✓ Chain ID: #{batch.chain_id}"
       
       # Verify transaction details
       batch.transactions.each_with_index do |tx, i|
@@ -115,13 +118,29 @@ RSpec.describe 'Blob End-to-End Integration' do
       # Create two separate batches
       batch1_txs = [create_test_transaction(value: 100, nonce: 0)]
       batch2_txs = [create_test_transaction(value: 200, nonce: 1)]
-      
-      batch1_data = create_test_batch_data(batch1_txs)
-      batch2_data = create_test_batch_data(batch2_txs)
-      
-      # Create payloads with magic prefix
-      payload1 = FacetBatchConstants::MAGIC_PREFIX.to_bin + [batch1_data.length].pack('N') + batch1_data
-      payload2 = FacetBatchConstants::MAGIC_PREFIX.to_bin + [batch2_data.length].pack('N') + batch2_data
+
+      # Create RLP transaction lists
+      rlp_tx_list1 = create_test_batch_data(batch1_txs)
+      rlp_tx_list2 = create_test_batch_data(batch2_txs)
+
+      # Build complete wire format for each batch
+      chain_id = ChainIdManager.current_l2_chain_id
+
+      # First batch
+      payload1 = FacetBatchConstants::MAGIC_PREFIX.to_bin
+      payload1 += [chain_id].pack('Q>')  # uint64 big-endian
+      payload1 += [FacetBatchConstants::VERSION].pack('C')
+      payload1 += [FacetBatchConstants::Role::PERMISSIONLESS].pack('C')
+      payload1 += [rlp_tx_list1.length].pack('N')
+      payload1 += rlp_tx_list1
+
+      # Second batch
+      payload2 = FacetBatchConstants::MAGIC_PREFIX.to_bin
+      payload2 += [chain_id].pack('Q>')  # uint64 big-endian
+      payload2 += [FacetBatchConstants::VERSION].pack('C')
+      payload2 += [FacetBatchConstants::Role::PERMISSIONLESS].pack('C')
+      payload2 += [rlp_tx_list2.length].pack('N')
+      payload2 += rlp_tx_list2
       
       # Aggregate with padding
       aggregated = payload1 + ("\x00".b * 1000) + payload2
@@ -135,7 +154,6 @@ RSpec.describe 'Blob End-to-End Integration' do
       
       parsed_batches = parser.parse_payload(
         decoded_bytes,
-        12345,
         0,
         FacetBatchConstants::Source::BLOB
       )
@@ -211,7 +229,7 @@ RSpec.describe 'Blob End-to-End Integration' do
       decoded = BlobUtils.from_blobs(blobs: blobs)
       decoded_bytes = ByteString.from_hex(decoded)
       
-      batches = parser.parse_payload(decoded_bytes, 12345, 0, FacetBatchConstants::Source::BLOB)
+      batches = parser.parse_payload(decoded_bytes, 0, FacetBatchConstants::Source::BLOB)
       
       expect(batches).to be_empty
       puts "  ✓ Correctly ignored batch with bad magic"

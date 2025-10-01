@@ -4,13 +4,17 @@ require 'blob_utils'
 module BlobTestHelper
   # Create a test blob with Facet batch data embedded using proper EIP-4844 encoding
   def create_test_blob_with_facet_data(transactions: [], position: :start)
-    # Create a valid Facet batch
-    batch_data = create_test_batch_data(transactions)
-    
-    # Add magic prefix and length header
+    # Create RLP transaction list
+    rlp_tx_list = create_test_batch_data(transactions)
+
+    # Build complete wire format
+    chain_id = ChainIdManager.current_l2_chain_id
     facet_payload = FacetBatchConstants::MAGIC_PREFIX.to_bin
-    facet_payload += [batch_data.length].pack('N')
-    facet_payload += batch_data
+    facet_payload += [chain_id].pack('Q>')  # uint64 big-endian
+    facet_payload += [FacetBatchConstants::VERSION].pack('C')
+    facet_payload += [FacetBatchConstants::Role::PERMISSIONLESS].pack('C')
+    facet_payload += [rlp_tx_list.length].pack('N')
+    facet_payload += rlp_tx_list
     
     # Create aggregated data based on position
     aggregated_data = case position
@@ -28,10 +32,15 @@ module BlobTestHelper
       padding + facet_payload
     when :multiple
       # Multiple Facet batches in same blob
-      second_batch = create_test_batch_data([create_test_transaction])
+      second_rlp_tx_list = create_test_batch_data([create_test_transaction])
+
+      # Build complete wire format for second batch
       second_payload = FacetBatchConstants::MAGIC_PREFIX.to_bin
-      second_payload += [second_batch.length].pack('N')
-      second_payload += second_batch
+      second_payload += [chain_id].pack('Q>')  # uint64 big-endian
+      second_payload += [FacetBatchConstants::VERSION].pack('C')
+      second_payload += [FacetBatchConstants::Role::PERMISSIONLESS].pack('C')
+      second_payload += [second_rlp_tx_list.length].pack('N')
+      second_payload += second_rlp_tx_list
       
       # Put both batches with padding between
       first_part = facet_payload
@@ -50,30 +59,15 @@ module BlobTestHelper
     ByteString.from_hex(blobs.first)
   end
   
-  # Create test batch data in RLP format
+  # Create test batch data (RLP-encoded transaction list)
   def create_test_batch_data(transactions = [])
-    chain_id = ChainIdManager.current_l2_chain_id
-    
     # Default to one test transaction if none provided
     if transactions.empty?
       transactions = [create_test_transaction]
     end
-    
-    # FacetBatchData = [version, chainId, role, targetL1Block, transactions[], extraData]
-    batch_data = [
-      Eth::Util.serialize_int_to_big_endian(1),  # version
-      Eth::Util.serialize_int_to_big_endian(chain_id),  # chainId
-      Eth::Util.serialize_int_to_big_endian(FacetBatchConstants::Role::FORCED),  # role
-      Eth::Util.serialize_int_to_big_endian(12345),  # targetL1Block
-      transactions.map(&:to_bin),  # transactions
-      ''  # extraData
-    ]
-    
-    # FacetBatch = [FacetBatchData, signature]
-    facet_batch = [batch_data, '']  # Empty signature for forced batch
-    
-    # Return RLP-encoded batch
-    Eth::Rlp.encode(facet_batch)
+
+    # Return RLP-encoded transaction list
+    Eth::Rlp.encode(transactions.map(&:to_bin))
   end
   
   # Create a test EIP-1559 transaction
@@ -178,7 +172,6 @@ module BlobTestHelper
     parser = FacetBatchParser.new
     parser.parse_payload(
       decoded_data.is_a?(String) ? ByteString.from_hex(decoded_data) : decoded_data,
-      12345,  # l1_block_number
       0,      # l1_tx_index
       FacetBatchConstants::Source::BLOB,
       { versioned_hash: "0x" + "a" * 64 }

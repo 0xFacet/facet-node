@@ -73,16 +73,17 @@ RSpec.describe "Mixed Transaction Types" do
       target_block = current_max_eth_block.number + 2  # +2 because we imported funding block
       batch_payload = create_batch_payload(
         transactions: [eip1559_tx],
-        role: FacetBatchConstants::Role::FORCED,
+        role: FacetBatchConstants::Role::PERMISSIONLESS,
         target_l1_block: target_block
       )
       
       puts "Target L1 block for batch: #{target_block}"
       puts "Batch should contain #{[eip1559_tx].length} transaction(s)"
       
-      # Debug the batch structure
-      test_decode = Eth::Rlp.decode(batch_payload.to_bin[12..-1])  # Skip magic + length
-      puts "Decoded batch has #{test_decode[0][4].length} transactions"
+      # Debug the batch structure - new format has FacetBatchConstants::HEADER_SIZE bytes
+      # [MAGIC:#{FacetBatchConstants::MAGIC_SIZE}][CHAIN_ID:8][VERSION:1][ROLE:1][LENGTH:4][RLP_TX_LIST]
+      test_decode = Eth::Rlp.decode(batch_payload.to_bin[FacetBatchConstants::HEADER_SIZE..-1])  # Skip header to get RLP_TX_LIST
+      puts "Decoded batch has #{test_decode.length} transactions"
       
       puts "Batch payload length: #{batch_payload.to_bin.length} bytes"
       puts "Batch payload hex (first 100 chars): #{batch_payload.to_hex[0..100]}"
@@ -219,7 +220,7 @@ RSpec.describe "Mixed Transaction Types" do
       
       forced_batch = create_batch_payload(
         transactions: [forced_tx],
-        role: FacetBatchConstants::Role::FORCED,
+        role: FacetBatchConstants::Role::PERMISSIONLESS,
         target_l1_block: current_max_eth_block.number + 1
       )
       
@@ -352,35 +353,25 @@ RSpec.describe "Mixed Transaction Types" do
   
   def create_batch_payload(transactions:, role:, target_l1_block:, sign: false)
     chain_id = ChainIdManager.current_l2_chain_id
-    
-    # FacetBatchData = [version, chainId, role, targetL1Block, transactions[], extraData]
-    batch_data = [
-      Eth::Util.serialize_int_to_big_endian(1),  # version
-      Eth::Util.serialize_int_to_big_endian(chain_id),  # chainId
-      Eth::Util.serialize_int_to_big_endian(role),  # role
-      Eth::Util.serialize_int_to_big_endian(target_l1_block),  # targetL1Block
-      transactions.map(&:to_bin),  # transactions array - ACTUALLY include them!
-      ''  # extraData
-    ]
-    
-    # FacetBatch = [FacetBatchData, signature]
-    # Always include signature field (can be empty string for non-priority)
+
+    # Create RLP-encoded transaction list
+    rlp_tx_list = Eth::Rlp.encode(transactions.map(&:to_bin))
+
+    # Build wire format: [MAGIC:#{FacetBatchConstants::MAGIC_SIZE}][CHAIN_ID:8][VERSION:1][ROLE:1][LENGTH:4][RLP_TX_LIST][SIGNATURE:65]?
+    payload = FacetBatchConstants::MAGIC_PREFIX.to_bin
+    payload += [chain_id].pack('Q>')  # uint64 big-endian
+    payload += [FacetBatchConstants::VERSION].pack('C')
+    payload += [role].pack('C')
+    payload += [rlp_tx_list.length].pack('N')
+    payload += rlp_tx_list
+
+    # Add signature for priority batches
     if sign && role == FacetBatchConstants::Role::PRIORITY
-      # Add dummy signature for priority batches
-      signature = "\x00" * 64 + "\x01"  # 65 bytes
-    else
-      signature = ''  # Empty signature for forced batches
+      # Add dummy signature for priority batches (65 bytes: r:32, s:32, v:1)
+      signature = "\x00" * 32 + "\x00" * 32 + "\x01"
+      payload += signature
     end
-    
-    facet_batch = [batch_data, signature]  # Always 2 elements
-    
-    # Encode with RLP
-    rlp_encoded = Eth::Rlp.encode(facet_batch)
-    
-    # Add wire format header
-    magic = FacetBatchConstants::MAGIC_PREFIX.to_bin
-    length = [rlp_encoded.length].pack('N')
-    
-    ByteString.from_bin(magic + length + rlp_encoded)
+
+    ByteString.from_bin(payload)
   end
 end

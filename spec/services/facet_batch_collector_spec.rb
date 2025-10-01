@@ -262,29 +262,19 @@ RSpec.describe FacetBatchCollector do
   end
   
   def create_batch_payload
-    # Create a valid RLP batch payload with magic prefix
+    # Create a valid batch in new wire format
     chain_id = ChainIdManager.current_l2_chain_id
-    
-    # FacetBatchData = [version, chainId, role, targetL1Block, transactions[], extraData]
-    batch_data = [
-      Eth::Util.serialize_int_to_big_endian(1),  # version
-      Eth::Util.serialize_int_to_big_endian(chain_id),  # chainId
-      Eth::Util.serialize_int_to_big_endian(FacetBatchConstants::Role::FORCED),  # role
-      Eth::Util.serialize_int_to_big_endian(block_number),  # targetL1Block
-      [],  # transactions (empty array)
-      ''   # extraData (empty)
-    ]
-    
-    # FacetBatch = [FacetBatchData, signature]
-    facet_batch = [batch_data, '']  # Empty signature for forced batch
-    
-    # Encode with RLP
-    rlp_encoded = Eth::Rlp.encode(facet_batch)
-    
-    # Add wire format header
+
+    # Create empty transaction list
+    rlp_tx_list = Eth::Rlp.encode([])
+
+    # Construct wire format: [MAGIC:#{FacetBatchConstants::MAGIC_SIZE}][CHAIN_ID:8][VERSION:1][ROLE:1][LENGTH:4][RLP_TX_LIST]
     magic = FacetBatchConstants::MAGIC_PREFIX.to_bin
-    length = [rlp_encoded.length].pack('N')
-    
-    ByteString.from_bin(magic + length + rlp_encoded)
+    chain_id_bytes = [chain_id].pack('Q>')  # uint64 big-endian
+    version_byte = [FacetBatchConstants::VERSION].pack('C')  # uint8
+    role_byte = [FacetBatchConstants::Role::PERMISSIONLESS].pack('C')  # uint8
+    length_bytes = [rlp_tx_list.length].pack('N')  # uint32 big-endian
+
+    ByteString.from_bin(magic + chain_id_bytes + version_byte + role_byte + length_bytes + rlp_tx_list)
   end
 end

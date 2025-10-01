@@ -199,6 +199,8 @@ class StandardL2Transaction < T::Struct
     # Handle both string and Eth::Address object returns
     address_hex = address.is_a?(String) ? address : address.to_s
     Address20.from_hex(address_hex)
+  rescue Secp256k1::DeserializationError => e
+    raise DecodeError, "Failed to recover EIP-1559 address: #{e.message}"
   end
   
   def self.recover_address_eip2930(decoded, v, r, s, chain_id)

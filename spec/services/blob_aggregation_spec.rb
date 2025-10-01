@@ -61,11 +61,14 @@ RSpec.describe 'Blob Aggregation Scenarios' do
     end
     
     it 'handles batch that claims size beyond blob boundary' do
-      # Create batch that claims to be huge
-      magic = FacetBatchConstants::MAGIC_PREFIX.to_bin
-      huge_size = [200_000].pack('N')  # Claims 200KB but blob is only 128KB
-      
-      blob_data = magic + huge_size + ("\x00".b * 100)
+      # Create batch header that claims to be huge
+      chain_id = ChainIdManager.current_l2_chain_id
+
+      blob_data = FacetBatchConstants::MAGIC_PREFIX.to_bin
+      blob_data += [chain_id].pack('Q>')  # uint64 big-endian
+      blob_data += [FacetBatchConstants::VERSION].pack('C')
+      blob_data += [FacetBatchConstants::Role::PERMISSIONLESS].pack('C')
+      blob_data += [200_000].pack('N')  # Claims 200KB but blob is only 128KB
       blob_data += "\x00".b * (131_072 - blob_data.length)
       
       blob = ByteString.from_bin(blob_data)
@@ -82,37 +85,19 @@ RSpec.describe 'Blob Aggregation Scenarios' do
         create_test_transaction(nonce: i, value: 1000 * (i + 1))
       end
       
-      # Create batch
-      batch = ParsedBatch.new(
-        role: FacetBatchConstants::Role::FORCED,
-        signer: nil,
-        target_l1_block: 12345,
-        l1_tx_index: 0,
-        source: FacetBatchConstants::Source::BLOB,
-        source_details: {},
-        transactions: transactions,
-        content_hash: Hash32.from_bin(Eth::Util.keccak256("test")),
-        chain_id: ChainIdManager.current_l2_chain_id,
-        extra_data: ByteString.from_bin("".b)
-      )
-      
-      # Encode for blob
-      batch_data = [
-        Eth::Util.serialize_int_to_big_endian(1),
-        Eth::Util.serialize_int_to_big_endian(batch.chain_id),
-        Eth::Util.serialize_int_to_big_endian(batch.role),
-        Eth::Util.serialize_int_to_big_endian(batch.target_l1_block),
-        batch.transactions.map(&:to_bin),
-        ''
-      ]
-      
-      facet_batch = [batch_data, '']
-      rlp_encoded = Eth::Rlp.encode(facet_batch)
-      
-      # Add wire format
+      # Create batch in new wire format
+      chain_id = ChainIdManager.current_l2_chain_id
+
+      # Create RLP-encoded transaction list
+      rlp_tx_list = Eth::Rlp.encode(transactions.map(&:to_bin))
+
+      # Construct wire format: [MAGIC:#{FacetBatchConstants::MAGIC_SIZE}][CHAIN_ID:8][VERSION:1][ROLE:1][LENGTH:4][RLP_TX_LIST]
       payload = FacetBatchConstants::MAGIC_PREFIX.to_bin
-      payload += [rlp_encoded.length].pack('N')
-      payload += rlp_encoded
+      payload += [chain_id].pack('Q>')  # uint64 big-endian
+      payload += [FacetBatchConstants::VERSION].pack('C')
+      payload += [FacetBatchConstants::Role::PERMISSIONLESS].pack('C')
+      payload += [rlp_tx_list.length].pack('N')
+      payload += rlp_tx_list
       
       # Embed in blob
       blob_data = payload + ("\x00".b * (131_072 - payload.length))
@@ -122,16 +107,15 @@ RSpec.describe 'Blob Aggregation Scenarios' do
       parser = FacetBatchParser.new
       parsed_batches = parser.parse_payload(
         blob,
-        batch.target_l1_block,
-        0,
+        0,      # l1_tx_index
         FacetBatchConstants::Source::BLOB
       )
-      
+
       expect(parsed_batches.length).to eq(1)
       parsed = parsed_batches.first
-      
-      expect(parsed.role).to eq(batch.role)
-      expect(parsed.target_l1_block).to eq(batch.target_l1_block)
+
+      expect(parsed.role).to eq(FacetBatchConstants::Role::PERMISSIONLESS)
+      expect(parsed.chain_id).to eq(chain_id)
       expect(parsed.transactions.length).to eq(3)
       expect(parsed.transactions.map(&:to_bin)).to eq(transactions.map(&:to_bin))
     end

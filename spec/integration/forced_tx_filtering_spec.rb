@@ -113,20 +113,17 @@ RSpec.describe 'Forced Transaction Filtering' do
   def create_forced_batch_payload(transactions:, target_l1_block:)
     chain_id = ChainIdManager.current_l2_chain_id
 
-    batch_data = [
-      Eth::Util.serialize_int_to_big_endian(1), # version
-      Eth::Util.serialize_int_to_big_endian(chain_id),
-      Eth::Util.serialize_int_to_big_endian(FacetBatchConstants::Role::FORCED),
-      Eth::Util.serialize_int_to_big_endian(target_l1_block),
-      transactions.map(&:to_bin),
-      ''
-    ]
+    # Create RLP-encoded transaction list
+    rlp_tx_list = Eth::Rlp.encode(transactions.map(&:to_bin))
 
-    facet_batch = [batch_data, '']
-    rlp_encoded = Eth::Rlp.encode(facet_batch)
+    # Build wire format: [MAGIC:#{FacetBatchConstants::MAGIC_SIZE}][CHAIN_ID:8][VERSION:1][ROLE:1][LENGTH:4][RLP_TX_LIST]
+    payload = FacetBatchConstants::MAGIC_PREFIX.to_bin
+    payload += [chain_id].pack('Q>')  # uint64 big-endian
+    payload += [FacetBatchConstants::VERSION].pack('C')
+    payload += [FacetBatchConstants::Role::PERMISSIONLESS].pack('C')
+    payload += [rlp_tx_list.length].pack('N')
+    payload += rlp_tx_list
 
-    magic = FacetBatchConstants::MAGIC_PREFIX.to_bin
-    length = [rlp_encoded.length].pack('N')
-    ByteString.from_bin(magic + length + rlp_encoded)
+    ByteString.from_bin(payload)
   end
 end

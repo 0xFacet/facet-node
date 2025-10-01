@@ -15,7 +15,7 @@ import { logger } from '../utils/logger.js';
 export class InclusionMonitor {
   private l1Client: PublicClient;
   private l2Client: PublicClient;
-  private readonly FACET_MAGIC_PREFIX = '0x0000000000012345';
+  private readonly FACET_MAGIC_PREFIX = '0x756e73746f707061626c652073657175656e63696e67';
   private isMonitoring = false;
 
   constructor(
@@ -219,27 +219,33 @@ export class InclusionMonitor {
   
   private checkForDroppedTransactions(l2BlockNumber: number): void {
     const database = this.db.getDatabase();
-    
-    // Transactions submitted more than 100 L2 blocks ago but not included
-    const threshold = l2BlockNumber - 100;
-    
+
+    // Transactions submitted more than 10 minutes ago but not included
+    const tenMinutesAgo = Date.now() - (10 * 60 * 1000);
+
     const dropped = database.prepare(`
-      SELECT t.hash, t.batch_id
+      SELECT DISTINCT t.hash, t.batch_id
       FROM transactions t
       JOIN batches b ON t.batch_id = b.id
-      WHERE t.state = 'submitted' 
-      AND b.target_l1_block < ?
-    `).all(threshold) as Array<{ hash: Buffer; batch_id: number }>;
-    
+      WHERE t.state = 'submitted'
+        AND EXISTS (
+          SELECT 1
+          FROM post_attempts pa
+          WHERE pa.batch_id = b.id
+            AND pa.status = 'mined'
+            AND pa.confirmed_at < ?
+        )
+    `).all(tenMinutesAgo) as Array<{ hash: Buffer; batch_id: number }>;
+
     for (const tx of dropped) {
       database.prepare(`
-        UPDATE transactions 
-        SET state = 'dropped', drop_reason = 'Not included after 100 blocks'
+        UPDATE transactions
+        SET state = 'dropped', drop_reason = 'Not included after 10 minutes'
         WHERE hash = ?
       `).run(tx.hash);
-      
-      logger.warn({ 
-        txHash: '0x' + tx.hash.toString('hex') 
+
+      logger.warn({
+        txHash: '0x' + tx.hash.toString('hex')
       }, 'Transaction dropped');
     }
   }

@@ -16,7 +16,7 @@ interface Transaction {
 export class BatchMaker {
   private readonly MAX_PER_SENDER = 10;
   private readonly MAX_BATCH_GAS = 30_000_000;
-  private readonly FACET_MAGIC_PREFIX = '0x0000000000012345' as Hex;
+  private readonly FACET_MAGIC_PREFIX = '0x756e73746f707061626c652073657175656e63696e67' as Hex; // "unstoppable sequencing"
   private readonly L2_CHAIN_ID: bigint;
   private readonly MAX_BLOB_SIZE = 131072; // 128KB
   private lastBatchTime = Date.now();
@@ -33,7 +33,6 @@ export class BatchMaker {
     const database = this.db.getDatabase();
 
     // Get L1 data before starting the transaction
-    const targetL1Block = await this.getNextL1Block();
     const gasBid = await this.calculateGasBid();
 
     return database.transaction(() => {
@@ -50,10 +49,13 @@ export class BatchMaker {
       // Apply selection criteria
       const selected = this.selectTransactions(candidates, maxBytes, maxCount);
       if (selected.length === 0) return null;
-      
+
+      const role = 0; // 0 = permissionless
+      const signature: Hex | undefined = undefined;
+
       // Create Facet batch wire format
-      const wireFormat = this.createFacetWireFormat(selected, targetL1Block);
-      const contentHash = this.calculateContentHash(selected, targetL1Block);
+      const wireFormat = this.createFacetWireFormat(selected, role, signature);
+      const contentHash = this.calculateContentHash(selected, role, signature);
       
       // Check for duplicate batch
       const existing = database.prepare(
@@ -72,15 +74,14 @@ export class BatchMaker {
 
       // Create batch record with tx_hashes as JSON
       const batchResult = database.prepare(`
-        INSERT INTO batches (content_hash, wire_format, state, blob_size, gas_bid, tx_count, target_l1_block, tx_hashes)
-        VALUES (?, ?, 'open', ?, ?, ?, ?, ?)
+        INSERT INTO batches (content_hash, wire_format, state, blob_size, gas_bid, tx_count, tx_hashes)
+        VALUES (?, ?, 'open', ?, ?, ?, ?)
       `).run(
         contentHash,
         wireFormat,
         wireFormat.length,
         gasBid.toString(),
         selected.length,
-        Number(targetL1Block),
         txHashesJson
       );
 
@@ -102,11 +103,10 @@ export class BatchMaker {
         'UPDATE batches SET state = ?, sealed_at = ? WHERE id = ?'
       ).run('sealed', Date.now(), batchId);
       
-      logger.info({ 
-        batchId, 
+      logger.info({
+        batchId,
         txCount: selected.length,
-        size: wireFormat.length,
-        targetL1Block: targetL1Block.toString()
+        size: wireFormat.length
       }, 'Batch created');
       
       return batchId;
@@ -142,56 +142,55 @@ export class BatchMaker {
     return selected;
   }
   
-  private createFacetWireFormat(transactions: Transaction[], targetL1Block: bigint): Buffer {
-    // Build FacetBatchData structure
-    const batchData = [
-      toHex(1), // version
-      toHex(this.L2_CHAIN_ID), // chainId  
-      "0x" as Hex, // role (0 = FORCED)
-      toHex(targetL1Block), // targetL1Block
-      transactions.map(tx => ('0x' + tx.raw.toString('hex')) as Hex), // raw transaction bytes
-      '0x' as Hex // extraData
+  private createFacetWireFormat(transactions: Transaction[], role: number, signature?: Hex): Buffer {
+    // RLP encode transaction list only (array of raw transaction bytes)
+    const txList = transactions.map(tx => ('0x' + tx.raw.toString('hex')) as Hex);
+    const rlpTxList = toRlp(txList);
+
+    // Build new wire format: [MAGIC:22][CHAIN_ID:8][VERSION:1][ROLE:1][LENGTH:4][RLP_TX_LIST]
+    const rlpSize = size(rlpTxList);
+    const parts: Hex[] = [
+      this.FACET_MAGIC_PREFIX,                      // MAGIC: 12 bytes
+      encodePacked(['uint64'], [this.L2_CHAIN_ID]), // CHAIN_ID: 8 bytes big-endian
+      encodePacked(['uint8'], [1]),                 // VERSION: 1 byte
+      encodePacked(['uint8'], [role]),              // ROLE: 1 byte
+      toHex(rlpSize, { size: 4 }),                  // LENGTH: 4 bytes big-endian
+      rlpTxList                                     // RLP_TX_LIST
     ];
-    
-    // For forced batches, wrap in outer array: [FacetBatchData]
-    // For priority batches, it would be: [FacetBatchData, signature]
-    const wrappedBatch = [batchData];
-    
-    // RLP encode the wrapped batch
-    const batchRlp = toRlp(wrappedBatch);
-    
-    // Create wire format: magic || uint32_be(length) || rlp(batch)
-    const lengthBytes = toHex(size(batchRlp), { size: 4 });
-    const wireFormatHex = concatHex([
-      this.FACET_MAGIC_PREFIX,
-      lengthBytes,
-      batchRlp
-    ]);
-    
+
+    if (signature) {
+      parts.push(signature);
+    }
+
+    const wireFormatHex = concatHex(parts);
+
     return Buffer.from(wireFormatHex.slice(2), 'hex');
   }
-  
-  private calculateContentHash(transactions: Transaction[], targetL1Block: bigint): Buffer {
-    // Calculate content hash for deduplication
-    const batchData = [
-      toHex(1), // version
-      toHex(this.L2_CHAIN_ID), // chainId
-      "0x" as Hex, // role (0 = FORCED)  
-      toHex(targetL1Block), // targetL1Block
-      transactions.map(tx => ('0x' + tx.raw.toString('hex')) as Hex),
-      '0x' as Hex
+
+  private calculateContentHash(transactions: Transaction[], role: number, signature?: Hex): Buffer {
+    // Calculate content hash from CHAIN_ID + VERSION + ROLE + RLP_TX_LIST + SIGNATURE
+    // Including signature ensures batches with different signatures don't deduplicate
+    // For permissionless batches (no signature), hash is just chain_id + version + role + txs
+    const txList = transactions.map(tx => ('0x' + tx.raw.toString('hex')) as Hex);
+    const rlpTxList = toRlp(txList);
+
+    const parts: Hex[] = [
+      encodePacked(['uint64'], [this.L2_CHAIN_ID]), // CHAIN_ID: 8 bytes
+      encodePacked(['uint8'], [1]),                 // VERSION: 1 byte
+      encodePacked(['uint8'], [role]),              // ROLE: 1 byte
+      rlpTxList                                     // RLP_TX_LIST
     ];
-    
-    const hash = keccak256(toRlp(batchData));
+
+    if (signature) {
+      parts.push(signature);
+    }
+
+    const contentData = concatHex(parts);
+
+    const hash = keccak256(contentData);
     return Buffer.from(hash.slice(2), 'hex');
   }
   
-  private async getNextL1Block(): Promise<bigint> {
-    // Get the actual next L1 block number
-    const currentBlock = await this.l1Client.getBlockNumber();
-    return currentBlock + 1n;
-  }
-
   private async calculateGasBid(): Promise<bigint> {
     // Get actual gas prices from L1
     const fees = await this.l1Client.estimateFeesPerGas();

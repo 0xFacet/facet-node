@@ -150,7 +150,6 @@ class FacetBatchCollector
     
     parser.parse_payload(
       input,
-      eth_block['number'].to_i(16),
       tx_index,
       FacetBatchConstants::Source::CALLDATA,
       source_details
@@ -188,7 +187,6 @@ class FacetBatchCollector
         
         batch_list = parser.parse_payload(
           blob_data,
-          block_number,
           carrier[:tx_index],
           FacetBatchConstants::Source::BLOB,
           source_details
