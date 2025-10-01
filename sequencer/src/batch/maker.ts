@@ -16,7 +16,7 @@ interface Transaction {
 export class BatchMaker {
   private readonly MAX_PER_SENDER = 10;
   private readonly MAX_BATCH_GAS = 30_000_000;
-  private readonly FACET_MAGIC_PREFIX = '0x0000000000012345' as Hex;
+  private readonly FACET_MAGIC_PREFIX = '0x756e73746f707061626c652073657175656e63696e67' as Hex; // "unstoppable sequencing"
   private readonly L2_CHAIN_ID: bigint;
   private readonly MAX_BLOB_SIZE = 131072; // 128KB
   private lastBatchTime = Date.now();
@@ -147,10 +147,10 @@ export class BatchMaker {
     const txList = transactions.map(tx => ('0x' + tx.raw.toString('hex')) as Hex);
     const rlpTxList = toRlp(txList);
 
-    // Build new wire format: [MAGIC:8][CHAIN_ID:8][VERSION:1][ROLE:1][LENGTH:4][RLP_TX_LIST]
+    // Build new wire format: [MAGIC:22][CHAIN_ID:8][VERSION:1][ROLE:1][LENGTH:4][RLP_TX_LIST]
     const rlpSize = size(rlpTxList);
     const parts: Hex[] = [
-      this.FACET_MAGIC_PREFIX,                      // MAGIC: 8 bytes
+      this.FACET_MAGIC_PREFIX,                      // MAGIC: 12 bytes
       encodePacked(['uint64'], [this.L2_CHAIN_ID]), // CHAIN_ID: 8 bytes big-endian
       encodePacked(['uint8'], [1]),                 // VERSION: 1 byte
       encodePacked(['uint8'], [role]),              // ROLE: 1 byte

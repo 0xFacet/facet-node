@@ -37,19 +37,10 @@ class FacetBatchParser
         chain_id_offset = index + FacetBatchConstants::CHAIN_ID_OFFSET
         wire_chain_id = data[chain_id_offset, FacetBatchConstants::CHAIN_ID_SIZE].unpack1('Q>')  # uint64 big-endian
 
-        # Skip if wrong chain ID
+        # Skip if wrong chain ID – move past the magic and keep scanning
         if wire_chain_id != chain_id
           logger.debug "Skipping batch for chain #{wire_chain_id} (expected #{chain_id})"
-
-          role_offset = index + FacetBatchConstants::ROLE_OFFSET
-          role = data[role_offset, FacetBatchConstants::ROLE_SIZE].unpack1('C')
-
-          # Read length to skip entire batch efficiently
-          length_offset = index + FacetBatchConstants::LENGTH_OFFSET
-          length = data[length_offset, FacetBatchConstants::LENGTH_SIZE].unpack1('N')  # uint32 big-endian
-
-          offset = index + FacetBatchConstants::HEADER_SIZE + length
-          offset += FacetBatchConstants::SIGNATURE_SIZE if role == FacetBatchConstants::Role::PRIORITY
+          offset = index + FacetBatchConstants::MAGIC_SIZE
           next
         end
 
@@ -68,26 +59,12 @@ class FacetBatchParser
         role = data[role_offset, FacetBatchConstants::ROLE_SIZE].unpack1('C')
         length_offset = index + FacetBatchConstants::LENGTH_OFFSET
         length = data[length_offset, FacetBatchConstants::LENGTH_SIZE].unpack1('N')
-        offset = index + FacetBatchConstants::HEADER_SIZE + length
-        offset += FacetBatchConstants::SIGNATURE_SIZE if role == FacetBatchConstants::Role::PRIORITY
+        total_size = FacetBatchConstants::HEADER_SIZE + length
+        total_size += FacetBatchConstants::SIGNATURE_SIZE if role == FacetBatchConstants::Role::PRIORITY
+        offset = index + total_size
       rescue ParseError, ValidationError => e
         logger.debug "Failed to parse batch at offset #{index}: #{e.message}"
-        # Try to skip past this batch
-        if index + FacetBatchConstants::HEADER_SIZE <= data.length
-          role_offset = index + FacetBatchConstants::ROLE_OFFSET
-          role = data[role_offset, FacetBatchConstants::ROLE_SIZE].unpack1('C')
-
-          length_offset = index + FacetBatchConstants::LENGTH_OFFSET
-          length = data[length_offset, FacetBatchConstants::LENGTH_SIZE].unpack1('N')
-          if length > 0 && length <= FacetBatchConstants::MAX_BATCH_BYTES
-            offset = index + FacetBatchConstants::HEADER_SIZE + length
-            offset += FacetBatchConstants::SIGNATURE_SIZE if role == FacetBatchConstants::Role::PRIORITY
-          else
-            offset = index + 1
-          end
-        else
-          offset = index + 1
-        end
+        offset = index + FacetBatchConstants::MAGIC_SIZE
       end
     end
 
@@ -98,7 +75,7 @@ class FacetBatchParser
   
   def parse_batch_at_offset(data, offset, l1_tx_index, source, source_details)
     # Read the fixed header fields
-    # [MAGIC:8][CHAIN_ID:8][VERSION:1][ROLE:1][LENGTH:4]
+    # [MAGIC:22][CHAIN_ID:8][VERSION:1][ROLE:1][LENGTH:4]
     pos = offset
 
     # Magic prefix (already validated by caller)

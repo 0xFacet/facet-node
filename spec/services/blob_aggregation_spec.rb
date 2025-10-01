@@ -91,7 +91,7 @@ RSpec.describe 'Blob Aggregation Scenarios' do
       # Create RLP-encoded transaction list
       rlp_tx_list = Eth::Rlp.encode(transactions.map(&:to_bin))
 
-      # Construct wire format: [MAGIC:8][CHAIN_ID:8][VERSION:1][ROLE:1][LENGTH:4][RLP_TX_LIST]
+      # Construct wire format: [MAGIC:#{FacetBatchConstants::MAGIC_SIZE}][CHAIN_ID:8][VERSION:1][ROLE:1][LENGTH:4][RLP_TX_LIST]
       payload = FacetBatchConstants::MAGIC_PREFIX.to_bin
       payload += [chain_id].pack('Q>')  # uint64 big-endian
       payload += [FacetBatchConstants::VERSION].pack('C')

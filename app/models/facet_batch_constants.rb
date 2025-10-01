@@ -1,18 +1,18 @@
 # Constants for Facet Batch V2 protocol
 module FacetBatchConstants
-  # Magic prefix to identify batch payloads (8 bytes)
-  MAGIC_PREFIX = ByteString.from_hex("0x0000000000012345")
+  # Magic prefix ("unstoppable sequencing" ASCII -> hex)
+  MAGIC_PREFIX = ByteString.from_hex("0x756e73746f707061626c652073657175656e63696e67")
 
   # Protocol version
   VERSION = 1
 
   # Wire format header sizes (in bytes)
-  MAGIC_SIZE = 8
+  MAGIC_SIZE = MAGIC_PREFIX.to_bin.bytesize
   CHAIN_ID_SIZE = 8    # uint64
   VERSION_SIZE = 1     # uint8
   ROLE_SIZE = 1        # uint8
   LENGTH_SIZE = 4      # uint32
-  HEADER_SIZE = MAGIC_SIZE + CHAIN_ID_SIZE + VERSION_SIZE + ROLE_SIZE + LENGTH_SIZE  # 22 bytes
+  HEADER_SIZE = MAGIC_SIZE + CHAIN_ID_SIZE + VERSION_SIZE + ROLE_SIZE + LENGTH_SIZE  # 36 bytes
   SIGNATURE_SIZE = 65  # secp256k1: r(32) + s(32) + v(1)
 
   # Wire format offsets

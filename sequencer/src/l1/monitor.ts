@@ -15,7 +15,7 @@ import { logger } from '../utils/logger.js';
 export class InclusionMonitor {
   private l1Client: PublicClient;
   private l2Client: PublicClient;
-  private readonly FACET_MAGIC_PREFIX = '0x0000000000012345';
+  private readonly FACET_MAGIC_PREFIX = '0x756e73746f707061626c652073657175656e63696e67';
   private isMonitoring = false;
 
   constructor(
@@ -224,13 +224,17 @@ export class InclusionMonitor {
     const tenMinutesAgo = Date.now() - (10 * 60 * 1000);
 
     const dropped = database.prepare(`
-      SELECT t.hash, t.batch_id
+      SELECT DISTINCT t.hash, t.batch_id
       FROM transactions t
       JOIN batches b ON t.batch_id = b.id
-      JOIN post_attempts pa ON pa.batch_id = b.id
       WHERE t.state = 'submitted'
-      AND pa.status = 'mined'
-      AND pa.confirmed_at < ?
+        AND EXISTS (
+          SELECT 1
+          FROM post_attempts pa
+          WHERE pa.batch_id = b.id
+            AND pa.status = 'mined'
+            AND pa.confirmed_at < ?
+        )
     `).all(tenMinutesAgo) as Array<{ hash: Buffer; batch_id: number }>;
 
     for (const tx of dropped) {

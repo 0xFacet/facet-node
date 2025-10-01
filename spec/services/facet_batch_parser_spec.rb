@@ -14,7 +14,7 @@ RSpec.describe FacetBatchParser do
       end
 
       let(:payload) do
-        # Construct wire format: [MAGIC:8][CHAIN_ID:8][VERSION:1][ROLE:1][LENGTH:4][RLP_TX_LIST]
+        # Construct wire format: [MAGIC:#{FacetBatchConstants::MAGIC_SIZE}][CHAIN_ID:8][VERSION:1][ROLE:1][LENGTH:4][RLP_TX_LIST]
         magic = FacetBatchConstants::MAGIC_PREFIX.to_bin
         chain_id_bytes = [chain_id].pack('Q>')  # uint64 big-endian
         version_byte = [FacetBatchConstants::VERSION].pack('C')  # uint8
@@ -187,7 +187,7 @@ RSpec.describe FacetBatchParser do
       # Build wire format batch for chain_id 0xface7b (16436859)
       chain_id = 0xface7b
 
-      # Construct wire format: [MAGIC:8][CHAIN_ID:8][VERSION:1][ROLE:1][LENGTH:4][RLP_TX_LIST]
+      # Construct wire format: [MAGIC:#{FacetBatchConstants::MAGIC_SIZE}][CHAIN_ID:8][VERSION:1][ROLE:1][LENGTH:4][RLP_TX_LIST]
       magic = FacetBatchConstants::MAGIC_PREFIX.to_bin
       chain_id_bytes = [chain_id].pack('Q>')  # uint64 big-endian
       version_byte = [FacetBatchConstants::VERSION].pack('C')
@@ -234,7 +234,7 @@ RSpec.describe FacetBatchParser do
 
       chain_id = 0xface7b
 
-      # Construct wire format for priority batch: [MAGIC:8][CHAIN_ID:8][VERSION:1][ROLE:1][LENGTH:4][RLP_TX_LIST][SIGNATURE:65]
+      # Construct wire format for priority batch: [MAGIC:#{FacetBatchConstants::MAGIC_SIZE}][CHAIN_ID:8][VERSION:1][ROLE:1][LENGTH:4][RLP_TX_LIST][SIGNATURE:65]
       magic = FacetBatchConstants::MAGIC_PREFIX.to_bin
       chain_id_bytes = [chain_id].pack('Q>')
       version_byte = [FacetBatchConstants::VERSION].pack('C')

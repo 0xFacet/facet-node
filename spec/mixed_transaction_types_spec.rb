@@ -80,9 +80,9 @@ RSpec.describe "Mixed Transaction Types" do
       puts "Target L1 block for batch: #{target_block}"
       puts "Batch should contain #{[eip1559_tx].length} transaction(s)"
       
-      # Debug the batch structure - new format has 22-byte header
-      # [MAGIC:8][CHAIN_ID:8][VERSION:1][ROLE:1][LENGTH:4][RLP_TX_LIST]
-      test_decode = Eth::Rlp.decode(batch_payload.to_bin[22..-1])  # Skip header to get RLP_TX_LIST
+      # Debug the batch structure - new format has FacetBatchConstants::HEADER_SIZE bytes
+      # [MAGIC:#{FacetBatchConstants::MAGIC_SIZE}][CHAIN_ID:8][VERSION:1][ROLE:1][LENGTH:4][RLP_TX_LIST]
+      test_decode = Eth::Rlp.decode(batch_payload.to_bin[FacetBatchConstants::HEADER_SIZE..-1])  # Skip header to get RLP_TX_LIST
       puts "Decoded batch has #{test_decode.length} transactions"
       
       puts "Batch payload length: #{batch_payload.to_bin.length} bytes"
@@ -357,7 +357,7 @@ RSpec.describe "Mixed Transaction Types" do
     # Create RLP-encoded transaction list
     rlp_tx_list = Eth::Rlp.encode(transactions.map(&:to_bin))
 
-    # Build wire format: [MAGIC:8][CHAIN_ID:8][VERSION:1][ROLE:1][LENGTH:4][RLP_TX_LIST][SIGNATURE:65]?
+    # Build wire format: [MAGIC:#{FacetBatchConstants::MAGIC_SIZE}][CHAIN_ID:8][VERSION:1][ROLE:1][LENGTH:4][RLP_TX_LIST][SIGNATURE:65]?
     payload = FacetBatchConstants::MAGIC_PREFIX.to_bin
     payload += [chain_id].pack('Q>')  # uint64 big-endian
     payload += [FacetBatchConstants::VERSION].pack('C')
