@@ -14,51 +14,74 @@ class FacetBatchParser
   
   # Parse a payload (calldata, event data, or blob) for batches
   # Returns array of ParsedBatch objects
-  def parse_payload(payload, l1_block_number, l1_tx_index, source, source_details = {})
+  def parse_payload(payload, l1_tx_index, source, source_details = {})
     return [] unless payload
-    
-    # logger.debug "FacetBatchParser: Parsing payload of length #{payload.is_a?(ByteString) ? payload.to_bin.length : payload.length} for block #{l1_block_number}"
-    
+
+    # logger.debug "FacetBatchParser: Parsing payload of length #{payload.is_a?(ByteString) ? payload.to_bin.length : payload.length}"
+
     batches = []
     data = payload.is_a?(ByteString) ? payload.to_bin : payload
-    
+
     # Scan for magic prefix at any offset
     offset = 0
-    magic_len = FacetBatchConstants::MAGIC_PREFIX.to_bin.length
-    
+
     while (index = data.index(FacetBatchConstants::MAGIC_PREFIX.to_bin, offset))
       logger.debug "FacetBatchParser: Found magic prefix at offset #{index}"
       begin
-        # Read length field to know how much to skip
-        length_pos = index + magic_len
-        if length_pos + 4 <= data.length
-          length = data[length_pos, 4].unpack1('N')
-          
-          batch = parse_batch_at_offset(data, index, l1_block_number, l1_tx_index, source, source_details)
-          batches << batch if batch
-          
-          # Enforce max batches per payload
-          if batches.length >= FacetBatchConstants::MAX_BATCHES_PER_PAYLOAD
-            logger.warn "Max batches per payload reached (#{FacetBatchConstants::MAX_BATCHES_PER_PAYLOAD})"
-            break
-          end
-          
-          # Move past this entire batch (magic + length field + batch data)
-          offset = index + magic_len + 4 + length
-        else
-          # Not enough data for length field
+        # Need at least full header to proceed
+        if index + FacetBatchConstants::HEADER_SIZE > data.length
           break
         end
+
+        # Read and validate chain ID early (before expensive RLP parsing)
+        chain_id_offset = index + FacetBatchConstants::CHAIN_ID_OFFSET
+        wire_chain_id = data[chain_id_offset, FacetBatchConstants::CHAIN_ID_SIZE].unpack1('Q>')  # uint64 big-endian
+
+        # Skip if wrong chain ID
+        if wire_chain_id != chain_id
+          logger.debug "Skipping batch for chain #{wire_chain_id} (expected #{chain_id})"
+          # Read length to skip entire batch efficiently
+          length_offset = index + FacetBatchConstants::LENGTH_OFFSET
+          length = data[length_offset, FacetBatchConstants::LENGTH_SIZE].unpack1('N')  # uint32 big-endian
+          offset = index + FacetBatchConstants::HEADER_SIZE + length
+          # Add signature size if priority batch
+          role_offset = index + FacetBatchConstants::ROLE_OFFSET
+          role = data[role_offset, FacetBatchConstants::ROLE_SIZE].unpack1('C')
+          offset += FacetBatchConstants::SIGNATURE_SIZE if role == FacetBatchConstants::Role::PRIORITY
+          next
+        end
+
+        batch = parse_batch_at_offset(data, index, l1_tx_index, source, source_details)
+        batches << batch if batch
+
+        # Enforce max batches per payload
+        if batches.length >= FacetBatchConstants::MAX_BATCHES_PER_PAYLOAD
+          logger.warn "Max batches per payload reached (#{FacetBatchConstants::MAX_BATCHES_PER_PAYLOAD})"
+          break
+        end
+
+        # Move past this entire batch
+        # Read length to know how much to skip
+        length_offset = index + FacetBatchConstants::LENGTH_OFFSET
+        length = data[length_offset, FacetBatchConstants::LENGTH_SIZE].unpack1('N')
+        offset = index + FacetBatchConstants::HEADER_SIZE + length
+        # Add signature size if priority batch
+        role_offset = index + FacetBatchConstants::ROLE_OFFSET
+        role = data[role_offset, FacetBatchConstants::ROLE_SIZE].unpack1('C')
+        offset += FacetBatchConstants::SIGNATURE_SIZE if role == FacetBatchConstants::Role::PRIORITY
       rescue ParseError, ValidationError => e
         logger.debug "Failed to parse batch at offset #{index}: #{e.message}"
-        # If we got a valid length, skip past the entire claimed batch to avoid O(N²) scanning
-        if length_pos + 4 <= data.length
-          length = data[length_pos, 4].unpack1('N')
+        # Try to skip past this batch
+        if index + FacetBatchConstants::HEADER_SIZE <= data.length
+          length_offset = index + FacetBatchConstants::LENGTH_OFFSET
+          length = data[length_offset, FacetBatchConstants::LENGTH_SIZE].unpack1('N')
           if length > 0 && length <= FacetBatchConstants::MAX_BATCH_BYTES
-            # Skip past the entire malformed batch
-            offset = index + magic_len + 4 + length
+            offset = index + FacetBatchConstants::HEADER_SIZE + length
+            # Check for priority batch signature
+            role_offset = index + FacetBatchConstants::ROLE_OFFSET
+            role = data[role_offset, FacetBatchConstants::ROLE_SIZE].unpack1('C')
+            offset += FacetBatchConstants::SIGNATURE_SIZE if role == FacetBatchConstants::Role::PRIORITY
           else
-            # Invalid length, just skip past magic
             offset = index + 1
           end
         else
@@ -66,161 +89,141 @@ class FacetBatchParser
         end
       end
     end
-    
+
     batches
   end
   
   private
   
-  def parse_batch_at_offset(data, offset, l1_block_number, l1_tx_index, source, source_details)
-    # Skip magic prefix
-    pos = offset + FacetBatchConstants::MAGIC_PREFIX.to_bin.length
-    
-    # Read length field (uint32)
-    return nil if pos + 4 > data.length
-    length = data[pos, 4].unpack1('N')  # Network byte order (big-endian)
-    pos += 4
-    
-    # Bounds check
+  def parse_batch_at_offset(data, offset, l1_tx_index, source, source_details)
+    # Read the fixed header fields
+    # [MAGIC:8][CHAIN_ID:8][VERSION:1][ROLE:1][LENGTH:4]
+    pos = offset
+
+    # Magic prefix (already validated by caller)
+    pos += FacetBatchConstants::MAGIC_SIZE
+
+    # Chain ID (uint64 big-endian)
+    return nil if pos + FacetBatchConstants::CHAIN_ID_SIZE > data.length
+    wire_chain_id = data[pos, FacetBatchConstants::CHAIN_ID_SIZE].unpack1('Q>')
+    pos += FacetBatchConstants::CHAIN_ID_SIZE
+
+    # Version (uint8)
+    return nil if pos + FacetBatchConstants::VERSION_SIZE > data.length
+    version = data[pos, FacetBatchConstants::VERSION_SIZE].unpack1('C')
+    pos += FacetBatchConstants::VERSION_SIZE
+
+    # Role (uint8)
+    return nil if pos + FacetBatchConstants::ROLE_SIZE > data.length
+    role = data[pos, FacetBatchConstants::ROLE_SIZE].unpack1('C')
+    pos += FacetBatchConstants::ROLE_SIZE
+
+    # Length (uint32 big-endian)
+    return nil if pos + FacetBatchConstants::LENGTH_SIZE > data.length
+    length = data[pos, FacetBatchConstants::LENGTH_SIZE].unpack1('N')
+    pos += FacetBatchConstants::LENGTH_SIZE
+
+    # Validate header fields
+    if version != FacetBatchConstants::VERSION
+      raise ValidationError, "Invalid batch version: #{version} != #{FacetBatchConstants::VERSION}"
+    end
+
+    if wire_chain_id != chain_id
+      raise ValidationError, "Invalid chain ID: #{wire_chain_id} != #{chain_id}"
+    end
+
+    unless [FacetBatchConstants::Role::PERMISSIONLESS, FacetBatchConstants::Role::PRIORITY].include?(role)
+      raise ValidationError, "Invalid role: #{role}"
+    end
+
     if length > FacetBatchConstants::MAX_BATCH_BYTES
       raise ParseError, "Batch too large: #{length} > #{FacetBatchConstants::MAX_BATCH_BYTES}"
     end
-    
+
+    # Read RLP_TX_LIST
     if pos + length > data.length
-      raise ParseError, "Batch extends beyond payload: need #{length} bytes, have #{data.length - pos}"
+      raise ParseError, "RLP data extends beyond payload: need #{length} bytes, have #{data.length - pos}"
     end
-    
-    # Extract batch data
-    batch_data = data[pos, length]
-    
-    # Decode RLP-encoded FacetBatch
-    decoded = decode_facet_batch_rlp(batch_data)
-    
-    # Validate batch
-    validate_batch(decoded, l1_block_number)
-    
+    rlp_tx_list = data[pos, length]
+    pos += length
+
+    # Read signature if priority batch
+    signature = nil
+    if role == FacetBatchConstants::Role::PRIORITY
+      if pos + FacetBatchConstants::SIGNATURE_SIZE > data.length
+        raise ParseError, "Signature extends beyond payload for priority batch"
+      end
+      signature = data[pos, FacetBatchConstants::SIGNATURE_SIZE]
+    end
+
+    # Decode RLP transaction list
+    transactions = decode_transaction_list(rlp_tx_list)
+
+    # Calculate content hash from CHAIN_ID + VERSION + ROLE + RLP_TX_LIST + SIGNATURE
+    # Including signature ensures batches with different signatures (e.g., invalid vs valid) don't deduplicate
+    content_data = [wire_chain_id].pack('Q>') + [version].pack('C') + [role].pack('C') + rlp_tx_list
+    if signature
+      content_data += signature
+    end
+    content_hash = Hash32.from_bin(Eth::Util.keccak256(content_data))
+
     # Verify signature if enabled and priority batch
     signer = nil
-    if decoded[:role] == FacetBatchConstants::Role::PRIORITY
+    if role == FacetBatchConstants::Role::PRIORITY
       if SysConfig.enable_sig_verify?
-        signer = verify_signature(decoded[:batch_data], decoded[:signature])
+        # Construct data to sign: [CHAIN_ID:8][VERSION:1][ROLE:1][RLP_TX_LIST]
+        signed_data = [wire_chain_id].pack('Q>') + [version].pack('C') + [role].pack('C') + rlp_tx_list
+        signer = verify_signature(signed_data, signature)
         raise ValidationError, "Invalid signature for priority batch" unless signer
       else
         # For testing without signatures
         logger.debug "Signature verification disabled for priority batch"
       end
     end
-    
+
     # Create ParsedBatch
     ParsedBatch.new(
-      role: decoded[:role],
+      role: role,
       signer: signer,
-      target_l1_block: decoded[:target_l1_block],
       l1_tx_index: l1_tx_index,
       source: source,
       source_details: source_details,
-      transactions: decoded[:transactions],
-      content_hash: decoded[:content_hash],
-      chain_id: decoded[:chain_id],
-      extra_data: decoded[:extra_data]
+      transactions: transactions,
+      content_hash: content_hash,
+      chain_id: wire_chain_id
     )
   end
   
-  def decode_facet_batch_rlp(data)
-    # RLP decode: [FacetBatchData, signature?]
-    # FacetBatchData = [version, chainId, role, targetL1Block, transactions[], extraData]
-    
-    decoded = Eth::Rlp.decode(data)
-    
-    unless decoded.is_a?(Array) && (decoded.length == 1 || decoded.length == 2)
-      raise ParseError, "Invalid batch structure: expected [FacetBatchData] or [FacetBatchData, signature]"
+  def decode_transaction_list(rlp_data)
+    # RLP decode transaction list - expecting an array of raw transaction bytes
+    decoded = Eth::Rlp.decode(rlp_data)
+
+    unless decoded.is_a?(Array)
+      raise ParseError, "Invalid transaction list: expected RLP array"
     end
-    
-    batch_data_rlp = decoded[0]
-    # For forced batches, signature can be omitted (length=1) or empty string (length=2)
-    signature = decoded.length == 2 ? decoded[1] : ''
-    
-    unless batch_data_rlp.is_a?(Array) && batch_data_rlp.length == 6
-      raise ParseError, "Invalid FacetBatchData: expected 6 fields, got #{batch_data_rlp.length}"
+
+    decoded.each_with_index do |tx, index|
+      unless tx.is_a?(String)
+        raise ParseError, "Invalid transaction entry at index #{index}: expected byte string"
+      end
     end
-    
-    # Parse FacetBatchData fields
-    version = deserialize_rlp_int(batch_data_rlp[0])
-    chain_id = deserialize_rlp_int(batch_data_rlp[1])
-    role = deserialize_rlp_int(batch_data_rlp[2])
-    target_l1_block = deserialize_rlp_int(batch_data_rlp[3])
-    
-    # Transactions array - each element is raw EIP-2718 typed tx bytes
-    unless batch_data_rlp[4].is_a?(Array)
-      raise ParseError, "Invalid transactions field: expected array"
+
+    # Validate transaction count
+    if decoded.length > FacetBatchConstants::MAX_TXS_PER_BATCH
+      raise ValidationError, "Too many transactions: #{decoded.length} > #{FacetBatchConstants::MAX_TXS_PER_BATCH}"
     end
-    transactions = batch_data_rlp[4].map { |tx| ByteString.from_bin(tx) }
-    
-    # Extra data
-    extra_data = batch_data_rlp[5].empty? ? nil : ByteString.from_bin(batch_data_rlp[5])
-    
-    # Calculate content hash from FacetBatchData only (excluding signature)
-    batch_data_encoded = Eth::Rlp.encode(batch_data_rlp)
-    content_hash = Hash32.from_bin(Eth::Util.keccak256(batch_data_encoded))
-    
-    {
-      version: version,
-      chain_id: chain_id,
-      role: role,
-      target_l1_block: target_l1_block,
-      transactions: transactions,
-      extra_data: extra_data,
-      content_hash: content_hash,
-      batch_data: batch_data_rlp,  # Keep for signature verification
-      signature: signature ? ByteString.from_bin(signature.b) : nil
-    }
-  rescue => e
-    raise ParseError, "Failed to decode RLP batch: #{e.message}"
+
+    # Each element should be raw transaction bytes (already EIP-2718 encoded)
+    decoded.map { |tx| ByteString.from_bin(tx) }
+  rescue StandardError => e
+    raise ParseError, "Failed to decode RLP transaction list: #{e.message}"
   end
   
-  # Deserialize RLP integer with same logic as FacetTransaction
-  def deserialize_rlp_int(data)
-    return 0 if data.empty?
-    
-    # Check for leading zeros (invalid in RLP)
-    if data.length > 1 && data[0] == "\x00"
-      raise ParseError, "Invalid RLP integer: leading zeros"
-    end
-    
-    data.unpack1('H*').to_i(16)
-  end
-  
-  def validate_batch(decoded, l1_block_number)
-    # Check version
-    if decoded[:version] != FacetBatchConstants::VERSION
-      raise ValidationError, "Invalid batch version: #{decoded[:version]} != #{FacetBatchConstants::VERSION}"
-    end
-    
-    # Check chain ID
-    if decoded[:chain_id] != chain_id
-      raise ValidationError, "Invalid chain ID: #{decoded[:chain_id]} != #{chain_id}"
-    end
-    
-    # TODO: make work or discard
-    # Check target block
-    # if decoded[:target_l1_block] != l1_block_number
-    #   raise ValidationError, "Invalid target block: #{decoded[:target_l1_block]} != #{l1_block_number}"
-    # end
-    
-    # Check transaction count
-    if decoded[:transactions].length > FacetBatchConstants::MAX_TXS_PER_BATCH
-      raise ValidationError, "Too many transactions: #{decoded[:transactions].length} > #{FacetBatchConstants::MAX_TXS_PER_BATCH}"
-    end
-    
-    # Check role
-    unless [FacetBatchConstants::Role::FORCED, FacetBatchConstants::Role::PRIORITY].include?(decoded[:role])
-      raise ValidationError, "Invalid role: #{decoded[:role]}"
-    end
-  end
-  
-  def verify_signature(data, signature)
-    # TODO: Implement EIP-712 signature verification
-    # For now, return nil (signature not verified)
-    nil
+  def verify_signature(signed_data, signature)
+    return nil unless signature
+
+    # Use BatchSignatureVerifier to verify the signature
+    verifier = BatchSignatureVerifier.new(chain_id: chain_id)
+    verifier.verify_wire_format(signed_data, signature)
   end
 end

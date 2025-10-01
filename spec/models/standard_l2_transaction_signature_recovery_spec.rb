@@ -79,10 +79,7 @@ RSpec.describe StandardL2Transaction do
         invalid_s = "\x00" * 32
         tx_data = [chain_id, 1, 100000, 200000, 21000, to_address, 1000000, "", []]
         
-        recovered = StandardL2Transaction.recover_address_eip1559(tx_data, 0, invalid_r, invalid_s, chain_id)
-        
-        # Should return null address without crashing
-        expect(recovered.to_hex).to eq("0x" + "0" * 40)
+        expect { StandardL2Transaction.recover_address_eip1559(tx_data, 0, invalid_r, invalid_s, chain_id) }.to raise_error(StandardL2Transaction::DecodeError)
       end
     end
     
