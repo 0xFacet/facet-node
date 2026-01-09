@@ -7,8 +7,10 @@ RSpec.describe L1RpcPrefetcher do
   
   before do
     allow(ethereum_client).to receive(:base_url).and_return('http://test.com')
+    allow(ethereum_client).to receive(:get_block_number).and_return(100)
     allow(Rails.logger).to receive(:debug)
     allow(Rails.logger).to receive(:info)
+    allow(Rails.logger).to receive(:warn)
     allow(Rails.logger).to receive(:error)
   end
   
@@ -35,6 +37,23 @@ RSpec.describe L1RpcPrefetcher do
       expect(ethereum_client).to receive(:get_block).with(1, true).and_return(block_data)
       expect(ethereum_client).to receive(:get_transaction_receipts).with(1).and_return(receipts_data)
       prefetcher.fetch(1)
+    end
+
+    it 'raises BlockFetchError when block is not ready' do
+      allow(ethereum_client).to receive(:get_block).and_return(nil)
+      expect { prefetcher.fetch(1) }.to raise_error(L1RpcPrefetcher::BlockFetchError, /not yet available/)
+    end
+
+    it 'does not prefetch beyond chain tip' do
+      allow(ethereum_client).to receive(:get_block_number).and_return(5)
+      allow(ethereum_client).to receive(:get_block).and_return(block_data)
+      allow(ethereum_client).to receive(:get_transaction_receipts).and_return(receipts_data)
+
+      prefetcher.ensure_prefetched(1)
+      sleep(0.1)  # Let promises start
+
+      promises = prefetcher.instance_variable_get(:@promises)
+      expect(promises.keys.sort).to eq([1, 2, 3, 4, 5])
     end
   end
   

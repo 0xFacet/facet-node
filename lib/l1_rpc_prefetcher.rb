@@ -1,35 +1,43 @@
-require 'concurrent'
-require 'retriable'
-
 class L1RpcPrefetcher
+  include Memery
+  class BlockFetchError < StandardError; end
+
   def initialize(ethereum_client:,
                  ahead: ENV.fetch('L1_PREFETCH_FORWARD', Rails.env.test? ? 5 : 20).to_i,
                  threads: ENV.fetch('L1_PREFETCH_THREADS', Rails.env.test? ? 2 : 2).to_i)
     @eth = ethereum_client
     @ahead = ahead
     @threads = threads
+    # 30s default - long enough for slow RPC calls, short enough to bail on stuck requests
+    @fetch_timeout = ENV.fetch('L1_PREFETCH_TIMEOUT', Rails.env.test? ? 5 : 30).to_i
 
     # Thread-safe collections and pool
     @pool = Concurrent::FixedThreadPool.new(threads)
     @promises = Concurrent::Map.new
+    @last_chain_tip = current_l1_block_number
 
     Rails.logger.info "L1RpcPrefetcher initialized with #{threads} threads"
   end
 
   def ensure_prefetched(from_block)
-    to_block = from_block + @ahead
+    distance_from_last_tip = @last_chain_tip - from_block
+    latest = if distance_from_last_tip > 10
+               cached_l1_block_number
+             else
+               current_l1_block_number
+             end
+
+    # Don't prefetch beyond chain tip
+    to_block = [from_block + @ahead, latest].min
+
     # Only create promises for blocks we don't have yet
     blocks_to_fetch = (from_block..to_block).reject { |n| @promises.key?(n) }
 
     return if blocks_to_fetch.empty?
 
-    # Only enqueue a reasonable number at once to avoid overwhelming the promise system
-    max_to_enqueue = [@threads * 10, 50].min
+    Rails.logger.debug "Enqueueing #{blocks_to_fetch.size} blocks: #{blocks_to_fetch.first}..#{blocks_to_fetch.last}"
 
-    to_enqueue = blocks_to_fetch.first(max_to_enqueue)
-    Rails.logger.debug "Enqueueing #{to_enqueue.size} of #{blocks_to_fetch.size} blocks: #{to_enqueue.first}..#{to_enqueue.last}"
-
-    to_enqueue.each { |block_number| enqueue_single(block_number) }
+    blocks_to_fetch.each { |block_number| enqueue_single(block_number) }
   end
 
   def fetch(block_number)
@@ -38,26 +46,22 @@ class L1RpcPrefetcher
     # Get or create promise
     promise = @promises[block_number] || enqueue_single(block_number)
 
-    # Wait for result - if it's already done, this returns immediately
-    timeout = Rails.env.test? ? 5 : 30
-
-    Rails.logger.debug "Fetching block #{block_number}, promise state: #{promise.state}"
-
+    # Wait for result - value! returns nil on timeout, raises on rejection
     begin
-      result = promise.value!(timeout)
-      Rails.logger.debug "Got result for block #{block_number}"
-
-      # Clean up :not_ready promises so they can be retried
-      if result[:error] == :not_ready
-        @promises.delete(block_number)
-      end
-
-      result
-    rescue Concurrent::TimeoutError => e
-      Rails.logger.error "Timeout fetching block #{block_number} after #{timeout}s"
-      @promises.delete(block_number)
-      raise
+      result = promise.value!(@fetch_timeout)
+    rescue => e
+      raise BlockFetchError.new("Block #{block_number} fetch failed: #{e.message}")
     end
+
+    if result.nil? || result == :not_ready_sentinel
+      @promises.delete(block_number)
+      message = result.nil? ?
+        "Block #{block_number} fetch timed out after #{@fetch_timeout}s" :
+        "Block #{block_number} not yet available on L1"
+      raise BlockFetchError.new(message)
+    end
+
+    result
   end
 
   def clear_older_than(min_keep)
@@ -99,26 +103,37 @@ class L1RpcPrefetcher
 
   def shutdown
     @pool.shutdown
-    if @pool.wait_for_termination(30)
-      Rails.logger.info "L1 RPC Prefetcher thread pool shut down successfully"
-    else
-      Rails.logger.warn "L1 RPC Prefetcher shutdown timed out, forcing kill"
-      @pool.kill
+    terminated = @pool.wait_for_termination(3)
+    @pool.kill unless terminated
+    @promises.each_pair do |_, promise|
+      begin
+        if promise.pending? && promise.respond_to?(:cancel)
+          promise.cancel
+        end
+      rescue StandardError => e
+        Rails.logger.warn "Failed cancelling promise during shutdown: #{e.message}"
+      end
     end
+    @promises.clear
+    Rails.logger.info(
+      terminated ?
+        'L1 RPC Prefetcher thread pool shut down successfully' :
+        'L1 RPC Prefetcher shutdown timed out after 3s, pool killed'
+    )
+    terminated
+  rescue StandardError => e
+    Rails.logger.error("Error during L1RpcPrefetcher shutdown: #{e.message}\n#{e.backtrace.join("\n")}")
+    false
   end
 
   private
 
   def enqueue_single(block_number)
     @promises.compute_if_absent(block_number) do
-      Rails.logger.debug "Creating promise for block #{block_number}"
-
       Concurrent::Promise.execute(executor: @pool) do
-        Rails.logger.debug "Executing fetch for block #{block_number}"
         fetch_job(block_number)
       end.rescue do |e|
-        Rails.logger.error "Prefetch failed for block #{block_number}: #{e.message}"
-        # Clean up failed promise so it can be retried
+        Rails.logger.error "[PREFETCH] Block #{block_number}: #{e.class} - #{e.message}"
         @promises.delete(block_number)
         raise e
       end
@@ -126,29 +141,33 @@ class L1RpcPrefetcher
   end
 
   def fetch_job(block_number)
-    # Use shared persistent client (thread-safe with HTTParty)
-    client = @eth
+    block = @eth.get_block(block_number, true)
 
-    Retriable.retriable(tries: 3, base_interval: 1, max_interval: 4) do
-      block = client.get_block(block_number, true)
-
-      # Handle case where block doesn't exist yet (normal when caught up)
-      if block.nil?
-        Rails.logger.debug "Block #{block_number} not yet available on L1"
-        return { error: :not_ready, block_number: block_number }
-      end
-
-      receipts = client.get_transaction_receipts(block_number)
-
-      eth_block = EthBlock.from_rpc_result(block)
-      facet_block = FacetBlock.from_eth_block(eth_block)
-      facet_txs = EthTransaction.facet_txs_from_rpc_results(block, receipts)
-
-      {
-        eth_block: eth_block,
-        facet_block: facet_block,
-        facet_txs: facet_txs
-      }
+    # Handle case where block doesn't exist yet (normal when caught up)
+    if block.nil?
+      Rails.logger.info "[PREFETCH] Block #{block_number} not yet available on L1"
+      return :not_ready_sentinel
     end
+
+    receipts = @eth.get_transaction_receipts(block_number)
+
+    eth_block = EthBlock.from_rpc_result(block)
+    facet_block = FacetBlock.from_eth_block(eth_block)
+    facet_txs = EthTransaction.facet_txs_from_rpc_results(block, receipts)
+
+    {
+      eth_block: eth_block,
+      facet_block: facet_block,
+      facet_txs: facet_txs
+    }
   end
+
+  def current_l1_block_number
+    @last_chain_tip = @eth.get_block_number
+  end
+
+  def cached_l1_block_number
+    current_l1_block_number
+  end
+  memoize :cached_l1_block_number, ttl: 12.seconds
 end

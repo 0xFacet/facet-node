@@ -86,16 +86,21 @@ module Clockwork
   every(6.seconds, 'import_blocks_until_done') do
     importer = EthBlockImporter.new
 
-    loop do
-      begin
-        importer.import_blocks_until_done
-      rescue EthBlockImporter::ReorgDetectedError
-        Rails.logger.warn 'Reorg detected – reinitialising EthBlockImporter'
-        importer = EthBlockImporter.new
-        retry
-      end
+    begin
+      loop do
+        begin
+          importer.import_blocks_until_done
+        rescue EthBlockImporter::ReorgDetectedError
+          Rails.logger.warn 'Reorg detected – reinitialising EthBlockImporter'
+          importer.shutdown
+          importer = EthBlockImporter.new
+          retry
+        end
 
-      sleep 6
+        sleep 6
+      end
+    ensure
+      importer&.shutdown
     end
   end
 end
