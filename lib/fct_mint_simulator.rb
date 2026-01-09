@@ -42,7 +42,7 @@ class FctMintSimulator
     @current_l2_block_number = nil
     
     # We'll fetch L1 blocks directly
-    @l1_client = EthRpcClient.new(ENV.fetch('L1_RPC_URL'))
+    @l1_client = EthRpcClient.l1
     
     if initial_state
       # Use provided initial state

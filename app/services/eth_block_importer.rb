@@ -1,5 +1,3 @@
-require 'l1_rpc_prefetcher'
-
 class EthBlockImporter
   include SysConfig
   include Memery
@@ -15,7 +13,7 @@ class EthBlockImporter
     @facet_block_cache = {}
     @eth_block_cache = {}
     
-    @ethereum_client ||= EthRpcClient.new(ENV.fetch('L1_RPC_URL'))
+    @ethereum_client ||= EthRpcClient.l1
     
     @geth_driver = GethDriver
     
@@ -26,7 +24,14 @@ class EthBlockImporter
     set_eth_block_starting_points
     populate_facet_block_cache
     
-    @prefetcher = L1RpcPrefetcher.new(ethereum_client: @ethereum_client)
+    @prefetcher = L1RpcPrefetcher.new(ethereum_client: EthRpcClient.l1_prefetch)
+
+    unless Rails.env.test?
+      max_block = current_max_eth_block_number
+      if max_block && max_block > 0
+        @prefetcher.ensure_prefetched(max_block + 1)
+      end
+    end
   end
   
   def current_max_facet_block_number
@@ -271,15 +276,15 @@ class EthBlockImporter
     start = Time.current
 
     # Fetch block data from prefetcher
-    response = prefetcher.fetch(block_number)
-
-    # Handle cancellation, fetch failure, or block not ready
-    if response.nil?
-      raise BlockNotReadyToImportError.new("Block #{block_number} fetch was cancelled or failed")
+    begin
+      response = prefetcher.fetch(block_number)
+    rescue L1RpcPrefetcher::BlockFetchError => e
+      raise BlockNotReadyToImportError.new(e.message)
     end
 
-    if response[:error] == :not_ready
-      raise BlockNotReadyToImportError.new("Block #{block_number} not yet available on L1")
+    # Handle cancellation or fetch failure
+    if response.nil?
+      raise BlockNotReadyToImportError.new("Block #{block_number} fetch was cancelled or failed")
     end
 
     eth_block = response[:eth_block]
@@ -329,9 +334,6 @@ class EthBlockImporter
   
   def import_next_block
     block_number = next_block_to_import
-
-    prefetcher.ensure_prefetched(block_number)
-
     import_single_block(block_number)
   end
   
