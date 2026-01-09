@@ -226,12 +226,11 @@ class EthRpcClient
   private
 
   def send_http_request_simple(data)
-    uri = URI(base_url)
-    request = Net::HTTP::Post.new(uri)
+    request = Net::HTTP::Post.new(@uri)
     request.body = data.to_json
     headers.each { |key, value| request[key] = value }
 
-    response = @http.request(uri, request)
+    response = @http.request(@uri, request)
 
     if response.code.to_i != 200
       raise HttpError.new(response.code.to_i, response.message)

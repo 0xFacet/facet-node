@@ -83,7 +83,7 @@ module Clockwork
     end
   end
 
-  every(6.seconds, 'import_blocks_until_done') do
+  every(2.seconds, 'import_blocks_until_done') do
     importer = EthBlockImporter.new
 
     begin

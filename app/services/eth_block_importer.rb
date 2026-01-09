@@ -1,5 +1,3 @@
-require 'l1_rpc_prefetcher'
-
 class EthBlockImporter
   include SysConfig
   include Memery
@@ -26,7 +24,7 @@ class EthBlockImporter
     set_eth_block_starting_points
     populate_facet_block_cache
     
-    @prefetcher = L1RpcPrefetcher.new(ethereum_client: @ethereum_client)
+    @prefetcher = L1RpcPrefetcher.new(ethereum_client: EthRpcClient.l1_prefetch)
 
     unless Rails.env.test?
       max_block = current_max_eth_block_number
