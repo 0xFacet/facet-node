@@ -21,7 +21,7 @@ services:
       start_period: 10s
 
   node:
-    image: ghcr.io/0xfacet/facet-node:v2.0.1
+    image: ghcr.io/0xfacet/facet-node:v2.0.2
     environment:
       JWT_SECRET: ${JWT_SECRET}
       L1_NETWORK: ${L1_NETWORK}
